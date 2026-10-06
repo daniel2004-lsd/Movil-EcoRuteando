@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useLanguage } from '../../shared/store/LanguageContext';
 
 export interface NavStepLike {
   instruction?: string;
@@ -44,6 +45,7 @@ export function NavigationBanner({
   onToggleVoice,
   onOpenSheet,
 }: NavigationBannerProps) {
+  const { t } = useLanguage();
   const maneuver = parseManeuver(instruction);
 
   if (arrived) {
@@ -58,7 +60,7 @@ export function NavigationBanner({
             <Ionicons name="flag" size={24} color="#fff" />
           </View>
           <View style={styles.info}>
-            <Text style={styles.arrivedTitle}>¡Has llegado!</Text>
+            <Text style={styles.arrivedTitle}>{t('planRoute.arrivedAlertTitle')}</Text>
             <Text style={styles.instruction} numberOfLines={2}>
               {instruction}
             </Text>

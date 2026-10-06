@@ -88,8 +88,8 @@ const OBSTACLE_TYPES = [
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
-          'Permiso denegado',
-          'Se necesita tu ubicación GPS para enviar el reporte.'
+          t('planRoute.permissionDeniedTitle'),
+          t('report.gpsMsg')
         );
         return;
       }
@@ -104,9 +104,9 @@ const OBSTACLE_TYPES = [
         addressText: location.trim(),
       });
 
-      Alert.alert('Reporte enviado', 'Gracias. El reporte ya está en el mapa con confianza inicial.');
+      Alert.alert(t('report.sentTitle'), t('report.sentMsgFull'));
     } catch (e: any) {
-      Alert.alert('No se pudo enviar', e?.message ?? 'Error inesperado');
+      Alert.alert(t('report.sendFailedTitle'), e?.message ?? t('planRoute.unexpectedError'));
       return;
     }
 

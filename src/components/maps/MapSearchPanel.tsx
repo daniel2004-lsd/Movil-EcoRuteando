@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SearchBar } from './SearchBar';
 import type { PlaceSuggestion } from '../../services/maps/googleMaps';
+import { useLanguage } from '../../shared/store/LanguageContext';
 
 interface MapSearchPanelProps {
   expanded: boolean;
@@ -65,6 +66,7 @@ export function MapSearchPanel({
   directionsReady = false,
   loading = false,
 }: MapSearchPanelProps) {
+  const { t } = useLanguage();
   const insets = useSafeAreaInsets();
 
   if (!expanded) {
@@ -86,7 +88,7 @@ export function MapSearchPanel({
           >
             <Ionicons name="search" size={20} color="#5f6368" />
             <Text style={styles.barText} numberOfLines={1}>
-              ¿A dónde quieres ir?
+              {t('map.barPlaceholder')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -107,7 +109,7 @@ export function MapSearchPanel({
         >
           <Ionicons name="arrow-back" size={20} color="#3c4043" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Planear ruta</Text>
+        <Text style={styles.headerTitle}>{t('map.planRoute')}</Text>
       </View>
 
       <View style={styles.row}>
@@ -117,7 +119,7 @@ export function MapSearchPanel({
           onChangeText={onOriginChange}
           onFocus={onOriginFocus}
           onClear={onClearOrigin}
-          placeholder="¿Dónde estás?"
+          placeholder={t('map.whereFrom')}
           leftIcon="ellipse-outline"
           rightIcon="locate"
           onRightIconPress={onLocatePress}
@@ -134,7 +136,7 @@ export function MapSearchPanel({
           onChangeText={onDestChange}
           onFocus={onDestFocus}
           onClear={onClearDest}
-          placeholder="¿A dónde vas?"
+          placeholder={t('map.whereTo')}
           leftIcon="location-outline"
           rightIcon="mic"
         />
@@ -195,7 +197,7 @@ export function MapSearchPanel({
         >
           <Ionicons name="navigate" size={18} color="#fff" />
           <Text style={styles.directionsText}>
-            {loading ? 'Calculando…' : 'Cómo llegar'}
+            {loading ? t('map.calculating') : t('planRoute.howToGet')}
           </Text>
         </TouchableOpacity>
       )}

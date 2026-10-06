@@ -1,7 +1,7 @@
 // src/shared/store/LanguageContext.tsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { translations } from '../../i18n/translations';
+import { translations, setCurrentLang } from '../../i18n/translations';
 type LangCode = 'es' | 'en' | 'fr' | 'pt';
 const messages = translations;
 
@@ -19,6 +19,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<LangCode>('es');
 
   useEffect(() => {
+    setCurrentLang(lang);
     AsyncStorage.getItem('eco_lang').then(stored => {
       if(
   stored === 'es' ||
@@ -33,6 +34,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   const setLang = (code: LangCode) => {
     setLangState(code);
+    setCurrentLang(code);
     AsyncStorage.setItem('eco_lang', code).catch(() => {});
   };
 

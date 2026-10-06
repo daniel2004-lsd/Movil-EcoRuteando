@@ -68,8 +68,8 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     if (retrySeconds > 0) return;
     setError('');
-    if (!email.trim() || !password.trim()) { setError('Completa todos los campos'); return; }
-    if (password.length < 8) { setError('La contraseña debe tener al menos 8 caracteres'); return; }
+    if (!email.trim() || !password.trim()) { setError(t('auth.fillAllFields')); return; }
+    if (password.length < 8) { setError(t('auth.passwordMin8Error')); return; }
     setLoading(true);
     try {
       const { data } = await apiClient.post('/api/auth/login', { email: email.trim(), password });
@@ -79,8 +79,8 @@ export default function LoginScreen() {
     } catch (err:any) {
       const d = err?.response?.data || {};
       const retryAfter = Number(d.retryAfterSeconds) || parseInt(err?.response?.headers?.['retry-after'],10) || 0;
-      if (retryAfter > 0) { setRetrySeconds(retryAfter); setError(d.detail || 'Demasiados intentos. Espera antes de reintentar.'); }
-      else setError(d.detail || d.message || err.message || 'Correo o contraseña incorrectos.');
+      if (retryAfter > 0) { setRetrySeconds(retryAfter); setError(d.detail || t('auth.tooManyAttempts')); }
+      else setError(d.detail || d.message || err.message || t('auth.invalidCredentials'));
     } finally { setLoading(false); }
   };
 
@@ -100,13 +100,13 @@ export default function LoginScreen() {
             <View style={[s.logoBox, isDark && s.logoBoxDark]}>
               <Image source={require("../../assets/logo.png")} style={{width:40,height:40,resizeMode:"contain"}} />
             </View>
-            <Text style={[s.appName, isDark && {color:'#e2e8f0'}]}>EcoRuteando</Text>
-            <Text style={[s.appSub, isDark && {color:'#94a3b8'}]}>Movilidad sostenible</Text>
+            <Text style={[s.appName, isDark && {color:'#e2e8f0'}]}>{t('common.appName')}</Text>
+            <Text style={[s.appSub, isDark && {color:'#94a3b8'}]}>{t('landing.tagline')}</Text>
           </View>
 
           <View style={[s.card, isDark && s.cardDark]}>
-            <Text style={[s.cardTitle, isDark && {color:'#e2e8f0'}]}>Iniciar sesión</Text>
-            <Text style={[s.cardSub, isDark && {color:'#94a3b8'}]}>Bienvenido de vuelta</Text>
+            <Text style={[s.cardTitle, isDark && {color:'#e2e8f0'}]}>{t('auth.loginTitle')}</Text>
+            <Text style={[s.cardSub, isDark && {color:'#94a3b8'}]}>{t('home.welcome')}</Text>
 
             {error ? (
               <View style={[s.errorBox, retrySeconds>0 && s.errorBoxWarn]}>
@@ -114,29 +114,29 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            <Text style={[s.label, isDark && {color:'#34D399'}]}>Correo electrónico</Text>
-            <TextInput value={email} onChangeText={setEmail} placeholder="tucorreo@email.com" placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} keyboardType="email-address" autoCapitalize="none" style={[s.input, isDark && s.inputDark]} />
+            <Text style={[s.label, isDark && {color:'#34D399'}]}>{t('auth.emailLabel')}</Text>
+            <TextInput value={email} onChangeText={setEmail} placeholder={t('auth.emailPlaceholder')} placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} keyboardType="email-address" autoCapitalize="none" style={[s.input, isDark && s.inputDark]} />
 
-            <Text style={[s.label, isDark && {color:'#34D399'}, {marginTop:14}]}>Contraseña</Text>
+            <Text style={[s.label, isDark && {color:'#34D399'}, {marginTop:14}]}>{t('auth.passwordLabel')}</Text>
             <View style={[s.inputRow, isDark && s.inputRowDark]}>
-              <TextInput value={password} onChangeText={setPassword} placeholder="Mínimo 8 caracteres" placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} secureTextEntry={!showPw} style={[s.inputFlex, isDark && {color:'#e2e8f0'}]} />
+              <TextInput value={password} onChangeText={setPassword} placeholder={t('auth.passwordMin')} placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} secureTextEntry={!showPw} style={[s.inputFlex, isDark && {color:'#e2e8f0'}]} />
               <TouchableOpacity onPress={()=>setShowPw(!showPw)}><Ionicons name={showPw?'eye-off':'eye'} size={18} color={isDark?'#94a3b8':'#6b7280'} /></TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={()=>router.push('/(auth)/recover')} style={s.forgot}><Text style={[s.forgotText, isDark && {color:'#34D399'}]}>¿Olvidaste tu contraseña?</Text></TouchableOpacity>
+            <TouchableOpacity onPress={()=>router.push('/(auth)/recover')} style={s.forgot}><Text style={[s.forgotText, isDark && {color:'#34D399'}]}>{t('auth.forgotPassword')}</Text></TouchableOpacity>
 
-            <TouchableOpacity onPress={handleLogin} disabled={loading || retrySeconds>0} style={[s.primaryBtn, (loading||retrySeconds>0) && {opacity:0.5}]}><Text style={s.primaryText}>{loading ? 'Iniciando sesión...' : 'Iniciar sesión'}</Text></TouchableOpacity>
+            <TouchableOpacity onPress={handleLogin} disabled={loading || retrySeconds>0} style={[s.primaryBtn, (loading||retrySeconds>0) && {opacity:0.5}]}><Text style={s.primaryText}>{loading ? t('auth.loggingIn') : t('auth.loginButton')}</Text></TouchableOpacity>
 
-            <View style={s.divider}><View style={[s.divLine, isDark && {backgroundColor:'#26383D'}]} /><Text style={[s.divText, isDark && {color:'#94a3b8'}]}>O continúa con</Text><View style={[s.divLine, isDark && {backgroundColor:'#26383D'}]} /></View>
+            <View style={s.divider}><View style={[s.divLine, isDark && {backgroundColor:'#26383D'}]} /><Text style={[s.divText, isDark && {color:'#94a3b8'}]}>{t('auth.orContinueWith')}</Text><View style={[s.divLine, isDark && {backgroundColor:'#26383D'}]} /></View>
 
             <View style={s.socialRow}>
               <SocialBtn icon="logo-google" color="#EA4335" label="Google" disabled={retrySeconds>0} onPress={handleGoogleLogin} />
               <SocialBtn icon="logo-facebook" color="#1877F2" label="Facebook" disabled={retrySeconds>0} onPress={handleFacebookLogin} />
             </View>
 
-            <View style={s.registerRow}><Text style={[s.registerText, isDark && {color:'#94a3b8'}]}>¿No tienes cuenta?</Text><TouchableOpacity onPress={()=>router.push('/(auth)/register')}><Text style={[s.registerLink, isDark && {color:'#34D399'}]}> Regístrate aquí</Text></TouchableOpacity></View>
+            <View style={s.registerRow}><Text style={[s.registerText, isDark && {color:'#94a3b8'}]}>{t('auth.noAccount')}</Text><TouchableOpacity onPress={()=>router.push('/(auth)/register')}><Text style={[s.registerLink, isDark && {color:'#34D399'}]}>{' '}{t('auth.registerHere')}</Text></TouchableOpacity></View>
           </View>
 
-          <Text style={[s.tagline, isDark && {color:'#94a3b8'}]}>Cada viaje sostenible comienza con un paso</Text>
+          <Text style={[s.tagline, isDark && {color:'#94a3b8'}]}>{t('auth.loginTagline')}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
