@@ -70,7 +70,7 @@ export default function VerifyCodeScreen() {
   const handleVerify = async () => {
     const joined = code.join('');
     if (joined.length < 4) {
-      setError('Completa los 4 digitos del codigo');
+      setError(t('auth.codeIncomplete'));
       return;
     }
     setError(null);
@@ -87,7 +87,7 @@ export default function VerifyCodeScreen() {
 
       router.replace('/(tabs)');
     } catch (err: any) {
-      setError(err?.message || 'Codigo invalido');
+      setError(err?.message || t('auth.codeInvalid'));
     } finally {
       setLoading(false);
     }
@@ -98,7 +98,7 @@ export default function VerifyCodeScreen() {
       await apiClient.post('/api/auth/send-verification', { email });
       setError(null);
     } catch {
-      setError('Error al reenviar codigo');
+      setError(t('auth.resendError'));
     }
   };
 
@@ -137,7 +137,7 @@ export default function VerifyCodeScreen() {
           >
             <View style={s.logoRow}>
               <LogoCircle size={32} />
-              <Text style={s.appName}>EcoRuteando</Text>
+              <Text style={s.appName}>{t('common.appName')}</Text>
             </View>
 
             <Text
@@ -146,7 +146,7 @@ export default function VerifyCodeScreen() {
                 isDark && { color: '#e5f9f0' },
               ]}
             >
-              Verifica tu cuenta
+              {t('auth.verifyCodeTitle')}
             </Text>
             <Text
               style={[
@@ -154,7 +154,7 @@ export default function VerifyCodeScreen() {
                 isDark && { color: '#9ca3af' },
               ]}
             >
-              Ingresa el código de 4 dígitos que enviamos a tu correo.
+              {t('auth.verifyCodeSubtitle')}
             </Text>
 
             <View style={s.codeRow}>
@@ -182,7 +182,7 @@ export default function VerifyCodeScreen() {
             {error && <Text style={s.error}>{error}</Text>}
 
             <GradientButton
-              title="Confirmar código"
+              title={t('auth.confirmCodeButton')}
               onPress={handleVerify}
               loading={loading}
               style={{ marginTop: spacing.md }}
@@ -197,7 +197,7 @@ export default function VerifyCodeScreen() {
                 size={16}
                 color={colors.ecoMain}
               />
-              <Text style={s.resendText}>Reenviar código</Text>
+              <Text style={s.resendText}>{t('auth.resendCode')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -209,7 +209,7 @@ export default function VerifyCodeScreen() {
                 size={18}
                 color={colors.textMuted}
               />
-              <Text style={s.backText}>Volver al registro</Text>
+              <Text style={s.backText}>{t('auth.backToRegister')}</Text>
             </TouchableOpacity>
           </Animated.View>
         </ScrollView>

@@ -2,10 +2,12 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, TAB_BAR_HEIGHT } from '../../src/shared/theme';
 import { useAuth } from '../../src/shared/store/AuthContext';
+import { useLanguage } from '../../src/shared/store/LanguageContext';
 
 export default function TabsLayout() {
   const { auth } = useAuth();
   const isGuest = !!auth.guest;
+  const { t } = useLanguage();
   return (
     <Tabs
       screenOptions={{
@@ -27,7 +29,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Inicio',
+          title: t('tabs.home'),
           href: isGuest ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
@@ -37,7 +39,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="plan-route"
         options={{
-          title: 'Ruta',
+          title: t('tabs.route'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="map" size={size} color={color} />
           ),
@@ -46,7 +48,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="history"
         options={{
-          title: 'Historial',
+          title: t('tabs.history'),
           href: isGuest ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="time" size={size} color={color} />
@@ -56,7 +58,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="favorites"
         options={{
-          title: 'Favoritos',
+          title: t('tabs.favorites'),
           href: isGuest ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="heart" size={size} color={color} />
@@ -66,7 +68,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="report"
         options={{
-          title: 'Reportar',
+          title: t('tabs.report'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="warning" size={size} color={color} />
           ),
@@ -77,7 +79,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="stats"
         options={{
-          title: 'Estadísticas',
+          title: t('tabs.stats'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="bar-chart" size={size} color={color} />
           ),
@@ -87,7 +89,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Perfil',
+          title: t('tabs.profile'),
           href: isGuest ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person" size={size} color={color} />

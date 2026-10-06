@@ -14,6 +14,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { t } = useLanguage();
   const { theme, toggleTheme } = useThemeMode();
   const isDark = theme === 'dark';
   const [form, setForm] = useState({ firstName:'', lastName:'', email:'', pw:'', confirmPw:'' });
@@ -24,16 +25,16 @@ export default function RegisterScreen() {
   const [error, setError] = useState<string|null>(null);
   const [loading, setLoading] = useState(false);
   const passwordChecks = [
-    { label:'Mínimo 8 caracteres', ok: form.pw.length >= 8 },
-    { label:'Al menos una mayúscula', ok: /[A-Z]/.test(form.pw) },
-    { label:'Al menos un número', ok: /\d/.test(form.pw) },
-    { label:'Al menos un carácter especial', ok: /[^A-Za-z0-9]/.test(form.pw) },
+    { label: t('auth.passwordMin'), ok: form.pw.length >= 8 },
+    { label: t('auth.pwCheckUppercase'), ok: /[A-Z]/.test(form.pw) },
+    { label: t('auth.pwCheckNumber'), ok: /\d/.test(form.pw) },
+    { label: t('auth.pwCheckSpecial'), ok: /[^A-Za-z0-9]/.test(form.pw) },
   ];
   const isFormValid = () => form.firstName.trim()!=='' && form.lastName.trim()!=='' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) && passwordChecks.every(c=>c.ok) && form.pw===form.confirmPw && termsAccepted;
 
   const handleRegister = async () => {
     setError(null);
-    if (!isFormValid()) { setError('Por favor, completa todos los campos correctamente'); return; }
+    if (!isFormValid()) { setError(t('auth.registerInvalidForm')); return; }
     setLoading(true);
     try {
       await apiClient.post('/api/auth/register', { firstName: form.firstName, lastName: form.lastName, email: form.email, password: form.pw });
@@ -41,15 +42,15 @@ export default function RegisterScreen() {
     } catch (err:any) {
       const msg = err.response?.data?.detail || err.response?.data?.message || '';
       if (err.response?.status===409 || msg.toLowerCase().includes('ya está registrado') || msg.toLowerCase().includes('already')) {
-        setError('El correo ya está registrado.');
-        Alert.alert('Ya estás registrado', 'Este correo ya tiene una cuenta. ¿Quieres iniciar sesión o reenviar el código de verificación?', [
-          { text: 'Iniciar sesión', onPress: ()=> router.replace('/(auth)/login') },
-          { text: 'Reenviar código', onPress: async ()=>{ try{ await apiClient.post('/api/auth/send-verification', { email: form.email }); router.replace(`/(auth)/verify-code?email=${encodeURIComponent(form.email)}`); } catch{} } },
-          { text: 'Cancelar', style: 'cancel' }
+        setError(t('auth.emailAlreadyRegistered'));
+        Alert.alert(t('auth.alreadyRegisteredTitle'), t('auth.alreadyRegisteredMsg'), [
+          { text: t('auth.loginButton'), onPress: ()=> router.replace('/(auth)/login') },
+          { text: t('auth.resendCode'), onPress: async ()=>{ try{ await apiClient.post('/api/auth/send-verification', { email: form.email }); router.replace(`/(auth)/verify-code?email=${encodeURIComponent(form.email)}`); } catch{} } },
+          { text: t('auth.cancel'), style: 'cancel' }
         ]);
       } else {
-        setError(err.response?.data?.detail || err.message || 'No fue posible registrar el usuario');
-        Alert.alert('Error', err.response?.data?.detail || err.message || 'No fue posible registrar');
+        setError(err.response?.data?.detail || err.message || t('auth.registerErrorFallback'));
+        Alert.alert(t('auth.errorTitle'), err.response?.data?.detail || err.message || t('auth.registerErrorFallback'));
       }
     } finally { setLoading(false); }
   };
@@ -87,36 +88,36 @@ export default function RegisterScreen() {
   return (
     <LinearGradient colors={isDark ? ['#0B1215','#111C20'] : ['#ecfdf5','#f0fdf4','#ccfbf1']} style={s.bg}>
       <TouchableOpacity onPress={toggleTheme} style={[s.themeBtn, isDark && s.themeBtnDark]}><Text>{isDark?'☀️':'🌙'}</Text></TouchableOpacity>
-      <TouchableOpacity onPress={()=>router.replace('/')} style={s.backTop}><Ionicons name="arrow-back" size={14} color={isDark?'#94a3b8':'#6b7280'} /><Text style={[s.backTopText, isDark&&{color:'#94a3b8'}]}>Volver</Text></TouchableOpacity>
+      <TouchableOpacity onPress={()=>router.replace('/')} style={s.backTop}><Ionicons name="arrow-back" size={14} color={isDark?'#94a3b8':'#6b7280'} /><Text style={[s.backTopText, isDark&&{color:'#94a3b8'}]}>{t('auth.back')}</Text></TouchableOpacity>
       <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':'height'}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
           <View style={s.logoWrap}>
             <View style={[s.logoBox, isDark && s.logoBoxDark]}><Image source={require("../../assets/logo.png")} style={{width:40,height:40,resizeMode:"contain"}} /></View>
-            <Text style={[s.appName, isDark&&{color:'#e2e8f0'}]}>EcoRuteando</Text>
-            <Text style={[s.appSub, isDark&&{color:'#94a3b8'}]}>Movilidad sostenible</Text>
+            <Text style={[s.appName, isDark&&{color:'#e2e8f0'}]}>{t('common.appName')}</Text>
+            <Text style={[s.appSub, isDark&&{color:'#94a3b8'}]}>{t('landing.tagline')}</Text>
           </View>
           <View style={[s.card, isDark && s.cardDark]}>
-            <Text style={[s.cardTitle, isDark&&{color:'#e2e8f0'}]}>Crear cuenta</Text>
-            <Text style={[s.cardSub, isDark&&{color:'#94a3b8'}]}>Comienza tu viaje sostenible</Text>
+            <Text style={[s.cardTitle, isDark&&{color:'#e2e8f0'}]}>{t('auth.registerTitle')}</Text>
+            <Text style={[s.cardSub, isDark&&{color:'#94a3b8'}]}>{t('auth.registerTagline')}</Text>
 
             <View style={s.row2}>
               <View style={{flex:1}}>
-                <Text style={[s.label, isDark&&{color:'#34D399'}]}>Nombre</Text>
-                <TextInput value={form.firstName} onChangeText={v=>setForm({...form, firstName:v})} placeholder="Tu nombre" placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} style={[s.input, isDark&&s.inputDark]} />
+                <Text style={[s.label, isDark&&{color:'#34D399'}]}>{t('auth.firstNameLabel')}</Text>
+                <TextInput value={form.firstName} onChangeText={v=>setForm({...form, firstName:v})} placeholder={t('auth.firstNamePlaceholder')} placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} style={[s.input, isDark&&s.inputDark]} />
               </View>
               <View style={{flex:1}}>
-                <Text style={[s.label, isDark&&{color:'#34D399'}]}>Apellido</Text>
-                <TextInput value={form.lastName} onChangeText={v=>setForm({...form, lastName:v})} placeholder="Salazar" placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} style={[s.input, isDark&&s.inputDark]} />
+                <Text style={[s.label, isDark&&{color:'#34D399'}]}>{t('auth.lastNameLabel')}</Text>
+                <TextInput value={form.lastName} onChangeText={v=>setForm({...form, lastName:v})} placeholder={t('auth.lastNamePlaceholder')} placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} style={[s.input, isDark&&s.inputDark]} />
               </View>
             </View>
 
-            <Text style={[s.label, isDark&&{color:'#34D399'}, {marginTop:14}]}>Correo electrónico</Text>
-            <TextInput value={form.email} onChangeText={v=>setForm({...form,email:v})} placeholder="tucorreo@email.com" placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} keyboardType="email-address" autoCapitalize="none" style={[s.input, isDark&&s.inputDark]} />
-            {form.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) && <Text style={s.okText}>Correo válido</Text>}
+            <Text style={[s.label, isDark&&{color:'#34D399'}, {marginTop:14}]}>{t('auth.emailLabel')}</Text>
+            <TextInput value={form.email} onChangeText={v=>setForm({...form,email:v})} placeholder={t('auth.emailPlaceholder')} placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} keyboardType="email-address" autoCapitalize="none" style={[s.input, isDark&&s.inputDark]} />
+            {form.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) && <Text style={s.okText}>{t('auth.emailValid')}</Text>}
 
-            <Text style={[s.label, isDark&&{color:'#34D399'}, {marginTop:14}]}>Contraseña</Text>
+            <Text style={[s.label, isDark&&{color:'#34D399'}, {marginTop:14}]}>{t('auth.passwordLabel')}</Text>
             <View style={[s.inputRow, isDark&&s.inputRowDark]}>
-              <TextInput value={form.pw} onChangeText={v=>setForm({...form,pw:v})} placeholder="Mínimo 8 caracteres" placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} secureTextEntry={!showPw} style={[s.inputFlex, isDark&&{color:'#e2e8f0'}]} />
+              <TextInput value={form.pw} onChangeText={v=>setForm({...form,pw:v})} placeholder={t('auth.passwordMin')} placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} secureTextEntry={!showPw} style={[s.inputFlex, isDark&&{color:'#e2e8f0'}]} />
               <TouchableOpacity onPress={()=>setShowPw(!showPw)}><Ionicons name={showPw?'eye-off':'eye'} size={18} color={isDark?'#94a3b8':'#6b7280'} /></TouchableOpacity>
             </View>
             {form.pw.length>0 && (
@@ -130,38 +131,38 @@ export default function RegisterScreen() {
               </View>
             )}
 
-            <Text style={[s.label, isDark&&{color:'#34D399'}, {marginTop:14}]}>Confirmar contraseña</Text>
+            <Text style={[s.label, isDark&&{color:'#34D399'}, {marginTop:14}]}>{t('auth.confirmPasswordLabel')}</Text>
             <View style={[s.inputRow, isDark&&s.inputRowDark]}>
-              <TextInput value={form.confirmPw} onChangeText={v=>setForm({...form,confirmPw:v})} placeholder="Repite tu contraseña" placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} secureTextEntry={!showConfirmPw} style={[s.inputFlex, isDark&&{color:'#e2e8f0'}]} />
+              <TextInput value={form.confirmPw} onChangeText={v=>setForm({...form,confirmPw:v})} placeholder={t('auth.confirmPasswordPlaceholder')} placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} secureTextEntry={!showConfirmPw} style={[s.inputFlex, isDark&&{color:'#e2e8f0'}]} />
               <TouchableOpacity onPress={()=>setShowConfirmPw(!showConfirmPw)}><Ionicons name={showConfirmPw?'eye-off':'eye'} size={18} color={isDark?'#94a3b8':'#6b7280'} /></TouchableOpacity>
             </View>
-            {form.confirmPw && form.pw===form.confirmPw && <Text style={s.okText}>Las contraseñas coinciden</Text>}
-            {form.confirmPw && form.pw!==form.confirmPw && <Text style={s.errText}>Las contraseñas no coinciden</Text>}
+            {form.confirmPw && form.pw===form.confirmPw && <Text style={s.okText}>{t('auth.passwordMatch')}</Text>}
+            {form.confirmPw && form.pw!==form.confirmPw && <Text style={s.errText}>{t('auth.passwordMismatch')}</Text>}
 
             <View style={s.termsRow}>
               <TouchableOpacity onPress={()=>setTermsAccepted(!termsAccepted)} style={[s.checkbox, termsAccepted && s.checkboxActive]}>{termsAccepted && <Ionicons name="checkmark" size={12} color="#fff" />}</TouchableOpacity>
-              <Text style={[s.termsText, isDark&&{color:'#94a3b8'}]}>Acepto los <Text style={{color:isDark?'#34D399':'#059669'}} onPress={()=>setShowTerms(true)}>Términos y Condiciones</Text></Text>
+              <Text style={[s.termsText, isDark&&{color:'#94a3b8'}]}>{t('auth.acceptTermsPrefix')}{' '}<Text style={{color:isDark?'#34D399':'#059669'}} onPress={()=>setShowTerms(true)}>{t('auth.termsAndConditions')}</Text></Text>
             </View>
 
             {error && (
               <View style={[s.errorBox, isDark&&{backgroundColor:'rgba(245,158,11,0.1)',borderColor:'rgba(245,158,11,0.4)'}]}>
                 <Text style={[s.errorText, isDark&&{color:'#fcd34d'}]}>{error}</Text>
-                <TouchableOpacity onPress={()=>router.push('/(auth)/login')}><Text style={[s.errorLink, isDark&&{color:'#34D399'}]}>¿Ya tienes cuenta? Inicia sesión aquí</Text></TouchableOpacity>
+                <TouchableOpacity onPress={()=>router.push('/(auth)/login')}><Text style={[s.errorLink, isDark&&{color:'#34D399'}]}>{t('auth.alreadyAccount')}{' '}{t('auth.loginHere')}</Text></TouchableOpacity>
               </View>
             )}
 
-            <TouchableOpacity onPress={handleRegister} disabled={!isFormValid() || loading} style={[s.primaryBtn, (!isFormValid()||loading)&&{opacity:0.5}]}><Text style={s.primaryText}>{loading?'Registrando...':'Registrarse'}</Text></TouchableOpacity>
+            <TouchableOpacity onPress={handleRegister} disabled={!isFormValid() || loading} style={[s.primaryBtn, (!isFormValid()||loading)&&{opacity:0.5}]}><Text style={s.primaryText}>{loading?t('auth.registering'):t('auth.registerButton')}</Text></TouchableOpacity>
 
-            <View style={s.divider}><View style={[s.divLine, isDark&&{backgroundColor:'rgba(52,211,153,0.2)'}]} /><Text style={[s.divText, isDark&&{color:'#94a3b8'}]}>O regístrate con</Text><View style={[s.divLine, isDark&&{backgroundColor:'rgba(52,211,153,0.2)'}]} /></View>
+            <View style={s.divider}><View style={[s.divLine, isDark&&{backgroundColor:'rgba(52,211,153,0.2)'}]} /><Text style={[s.divText, isDark&&{color:'#94a3b8'}]}>{t('auth.orRegisterWith')}</Text><View style={[s.divLine, isDark&&{backgroundColor:'rgba(52,211,153,0.2)'}]} /></View>
             <View style={s.socialRow}>
               <SocialBtn icon="logo-google" color="#EA4335" label="Google" onPress={handleGoogleLogin} />
               <SocialBtn icon="logo-facebook" color="#1877F2" label="Facebook" onPress={handleFacebookLogin} />
               <TouchableOpacity style={[s.socialBtn, isDark&&{borderColor:'rgba(52,211,153,0.3)'}]} onPress={()=>{}}><Ionicons name="close" size={18} color={isDark?'#94a3b8':'#6b7280'} /><Text style={[s.socialLabel, isDark&&{color:'#94a3b8'}]}>X</Text></TouchableOpacity>
             </View>
 
-            <View style={s.registerRow}><Text style={[s.registerText, isDark&&{color:'#94a3b8'}]}>¿Ya tienes cuenta?</Text><TouchableOpacity onPress={()=>router.replace('/(auth)/login')}><Text style={[s.registerLink, isDark&&{color:'#34D399'}]}> Inicia sesión aquí</Text></TouchableOpacity></View>
+            <View style={s.registerRow}><Text style={[s.registerText, isDark&&{color:'#94a3b8'}]}>{t('auth.alreadyAccount')}</Text><TouchableOpacity onPress={()=>router.replace('/(auth)/login')}><Text style={[s.registerLink, isDark&&{color:'#34D399'}]}>{' '}{t('auth.loginHere')}</Text></TouchableOpacity></View>
           </View>
-          <Text style={[s.tagline, isDark&&{color:'#94a3b8'}]}>Únete a la comunidad que cuida el planeta</Text>
+          <Text style={[s.tagline, isDark&&{color:'#94a3b8'}]}>{t('auth.communityTagline')}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>

@@ -6,19 +6,20 @@ import { useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing } from '../../theme';
+import { useLanguage } from '../../store/LanguageContext';
 
-const TERMS = [
-  { title: '1. Aceptación de los Términos', body: 'Al registrarse y utilizar los servicios de EcoRuteando, usted acepta quedar vinculado por estos Términos y Condiciones. Si no está de acuerdo con alguno de los términos aquí establecidos, le recomendamos no hacer uso de la plataforma.' },
-  { title: '2. Descripción del Servicio', body: 'EcoRuteando es una plataforma de movilidad sostenible desarrollada en el marco del programa de Desarrollo de Software del SENA, sede Neiva, Colombia. Su propósito es facilitar la planificación de rutas ecológicas eficientes, promoviendo la reducción de la huella de carbono en entornos urbanos.' },
-  { title: '3. Registro de Usuario', body: 'Para acceder a las funcionalidades completas de la plataforma, el usuario deberá crear una cuenta con información veraz, completa y actualizada. EcoRuteando se reserva el derecho de suspender o eliminar cuentas que contengan datos falsos o que infrinjan estos términos. El usuario es responsable de mantener la confidencialidad de sus credenciales de acceso.' },
-  { title: '4. Uso Aceptable', body: 'El usuario se compromete a utilizar la plataforma únicamente para fines lícitos y de acuerdo con su propósito. Queda expresamente prohibido: compartir contenido ofensivo, usar la plataforma para actividades ilegales, intentar vulnerar la seguridad del sistema, suplantar la identidad de otros usuarios o de EcoRuteando, y realizar acciones que puedan afectar el rendimiento de la plataforma.' },
-  { title: '5. Privacidad y Protección de Datos', body: 'EcoRuteando recopila y trata los datos personales de sus usuarios conforme a la Ley 1581 de 2012 (Ley de Protección de Datos Personales de Colombia) y sus decretos reglamentarios. Los datos recopilados se utilizan exclusivamente para la prestación del servicio, la mejora de la plataforma y el envío de comunicaciones relacionadas, siempre con el consentimiento previo del usuario.' },
-  { title: '6. Información de Rutas y Disponibilidad', body: 'La información sobre rutas y tiempos de trayecto es referencial y puede variar en función de las condiciones locales. EcoRuteando no se hace responsable por retrasos, cambios de ruta o información desactualizada.' },
-  { title: '7. Propiedad Intelectual', body: 'Todos los derechos de propiedad intelectual sobre la plataforma, incluyendo su diseño, código fuente, logotipos y contenidos, pertenecen al equipo de desarrollo de EcoRuteando. Queda prohibida su reproducción, modificación o distribución sin autorización expresa y por escrito.' },
-  { title: '8. Modificaciones al Servicio', body: 'EcoRuteando se reserva el derecho de modificar, suspender o discontinuar el servicio en cualquier momento, con o sin previo aviso. Asimismo, estos Términos y Condiciones pueden ser actualizados periódicamente; los cambios entrarán en vigor en el momento de su publicación en la plataforma.' },
-  { title: '9. Limitación de Responsabilidad', body: 'EcoRuteando no será responsable por daños directos, indirectos, incidentales o consecuentes derivados del uso o la imposibilidad de uso de la plataforma, incluyendo pérdidas de datos, interrupciones del servicio o inexactitudes en la información de rutas.' },
-  { title: '10. Ley Aplicable y Jurisdicción', body: 'Estos Términos y Condiciones se rigen por las leyes de la República de Colombia. Cualquier disputa derivada de su interpretación o aplicación será resuelta ante los tribunales competentes de la ciudad de Neiva, Huila, Colombia.' },
-  { title: '11. Contacto', body: 'Para consultas relacionadas con estos términos, el usuario puede comunicarse a través de los canales oficiales de EcoRuteando disponibles en la plataforma.' },
+const getTerms = (t: (path: string) => string) => [
+  { title: t('terms.acceptance.title'), body: t('terms.acceptance.body') },
+  { title: t('terms.service.title'), body: t('terms.service.body') },
+  { title: t('terms.registration.title'), body: t('terms.registration.body') },
+  { title: t('terms.acceptableUse.title'), body: t('terms.acceptableUse.body') },
+  { title: t('terms.privacy.title'), body: t('terms.privacy.body') },
+  { title: t('terms.routes.title'), body: t('terms.routes.body') },
+  { title: t('terms.intellectual.title'), body: t('terms.intellectual.body') },
+  { title: t('terms.modifications.title'), body: t('terms.modifications.body') },
+  { title: t('terms.liability.title'), body: t('terms.liability.body') },
+  { title: t('terms.law.title'), body: t('terms.law.body') },
+  { title: t('terms.contact.title'), body: t('terms.contact.body') },
 ];
 
 interface Props {
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export function TermsModal({ visible, onClose, onAccept }: Props) {
+  const { t } = useLanguage();
   const [hasScrolled, setHasScrolled] = useState(false);
 
   const handleScroll = (e: any) => {
@@ -46,8 +48,8 @@ export function TermsModal({ visible, onClose, onAccept }: Props) {
             <View style={s.headerIcon}>
               <Text style={{ fontSize: 22 }}>📋</Text>
             </View>
-            <Text style={s.headerTitle}>Términos y Condiciones</Text>
-            <Text style={s.headerSub}>EcoRuteando · Última actualización: enero 2025</Text>
+            <Text style={s.headerTitle}>{t('auth.termsAndConditions')}</Text>
+            <Text style={s.headerSub}>{t('auth.termsUpdated')}</Text>
             <TouchableOpacity style={s.closeX} onPress={onClose}>
               <Ionicons name="close" size={20} color="rgba(255,255,255,0.8)" />
             </TouchableOpacity>
@@ -56,12 +58,12 @@ export function TermsModal({ visible, onClose, onAccept }: Props) {
           {!hasScrolled && (
             <View style={s.hint}>
               <Ionicons name="hand-right-outline" size={15} color={colors.ecoMain} />
-              <Text style={s.hintText}>Desplázate hasta el final para poder aceptar</Text>
+              <Text style={s.hintText}>{t('terms.hint')}</Text>
             </View>
           )}
 
           <ScrollView style={s.scroll} onScroll={handleScroll} scrollEventThrottle={16} showsVerticalScrollIndicator>
-            {TERMS.map((item, i) => (
+            {getTerms(t).map((item, i) => (
               <View key={i} style={s.section}>
                 <View style={s.titleRow}>
                   <View style={s.dot} />
@@ -75,7 +77,7 @@ export function TermsModal({ visible, onClose, onAccept }: Props) {
 
           <View style={s.footer}>
             <TouchableOpacity style={s.btnClose} onPress={onClose}>
-              <Text style={s.btnCloseText}>Cerrar</Text>
+              <Text style={s.btnCloseText}>{t('auth.close')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.btnAccept, !hasScrolled && s.btnDisabled]}
@@ -88,7 +90,7 @@ export function TermsModal({ visible, onClose, onAccept }: Props) {
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               >
                 <Ionicons name={hasScrolled ? 'checkmark-circle' : 'lock-closed'} size={16} color="#fff" />
-                <Text style={s.btnAcceptText}>{hasScrolled ? 'Acepto los términos' : 'Lee hasta el final'}</Text>
+                <Text style={s.btnAcceptText}>{hasScrolled ? t('auth.acceptTermsButton') : t('terms.readToEnd')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
