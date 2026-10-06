@@ -1,0 +1,40 @@
+// app/_layout.tsx
+import React, { useEffect } from 'react';
+import { Stack } from 'expo-router';
+import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
+
+import { ThemeProvider } from '../src/shared/store/ThemeContext';
+import { LanguageProvider } from '../src/shared/store/LanguageContext';
+import { AuthProvider } from '../src/shared/store/AuthContext';
+
+// Mantenemos la pantalla de splash hasta que carguen las fuentes
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    EcoSerif: require('../assets/fonts/EcoSerif-Regular.ttf'),
+    // Si luego agregas bold: EcoSerifBold: require('../assets/fonts/EcoSerif-Bold.ttf'),
+  });
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) {
+    // No mostramos la app hasta tener la fuente lista
+    return null;
+  }
+
+  return (
+    <ThemeProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <Stack screenOptions={{ headerShown: false }} />
+        </AuthProvider>
+      </LanguageProvider>
+    </ThemeProvider>
+  );
+}
