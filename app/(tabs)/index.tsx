@@ -7,12 +7,12 @@ import { useAuth } from '../../src/shared/store/AuthContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 
 const MODULES = [
-  { id:'plan_ruta', icon:'map', title:'Planificar ruta', subtitle:'Calcula tu ruta ecológica', colors:['#10b981','#059669'] },
-  { id:'mis_rutas', icon:'route', title:'Mis rutas', subtitle:'Tus rutas guardadas', colors:['#06b6d4','#0284c7'] },
-  { id:'historial', icon:'time', title:'Historial', subtitle:'Tus trayectos pasados', colors:['#a855f7','#7c3aed'] },
-  { id:'favoritos', icon:'heart', title:'Favoritos', subtitle:'Rutas favoritas', colors:['#f43f5e','#ef4444'] },
-  { id:'perfil', icon:'person', title:'Perfil', subtitle:'Tu información', colors:['#14b8a6','#0891b2'] },
-  { id:'alertas', icon:'warning', title:'Alertas', subtitle:'Clima y avisos', colors:['#f59e0b','#ea580c'] },
+  { id:'plan_ruta', icon:'map', titleKey:'home.modPlan', subKey:'home.modPlanSub', colors:['#10b981','#059669'] },
+  { id:'mis_rutas', icon:'route', titleKey:'home.modRoutes', subKey:'home.modRoutesSub', colors:['#06b6d4','#0284c7'] },
+  { id:'historial', icon:'time', titleKey:'home.modHistory', subKey:'home.modHistorySub', colors:['#a855f7','#7c3aed'] },
+  { id:'favoritos', icon:'heart', titleKey:'home.modFavs', subKey:'home.modFavsSub', colors:['#f43f5e','#ef4444'] },
+  { id:'perfil', icon:'person', titleKey:'home.modProfile', subKey:'home.modProfileSub', colors:['#14b8a6','#0891b2'] },
+  { id:'alertas', icon:'warning', titleKey:'home.modAlerts', subKey:'home.modAlertsSub', colors:['#f59e0b','#ea580c'] },
 ];
 
 export default function HomeScreen() {
@@ -21,52 +21,52 @@ export default function HomeScreen() {
   const { auth, signOut } = useAuth();
   const { t } = useLanguage();
   const isDark = theme === 'dark';
-  const userName = auth.firstName || auth.email?.split('@')[0] || 'usuario';
+  const userName = auth.firstName || auth.email?.split('@')[0] || t('home.defaultUser');
 
   return (
     <View style={[s.page, isDark && s.pageDark]}>
       <View style={[s.header, isDark && s.headerDark]}>
         <View style={s.headerLeft}>
           <View style={s.logoBox}><Text style={s.logoIcon}>🌿</Text></View>
-          <Text style={[s.headerTitle, isDark&&{color:'#e2e8f0'}]}>EcoRuteando</Text>
+          <Text style={[s.headerTitle, isDark&&{color:'#e2e8f0'}]}>{t('common.appName')}</Text>
         </View>
         <TouchableOpacity onPress={async()=>{await signOut(); router.replace('/(auth)/login');}} style={[s.logoutBtn, isDark&&{backgroundColor:'#162329',borderColor:'#26383D'}]}>
           <Ionicons name="log-out-outline" size={16} color={isDark?'#e2e8f0':'#4b5563'} />
-          <Text style={[s.logoutText, isDark&&{color:'#e2e8f0'}]}>Salir</Text>
+          <Text style={[s.logoutText, isDark&&{color:'#e2e8f0'}]}>{t('home.logoutShort')}</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={s.scroll}>
         <View style={[s.greetingCard, isDark&&s.greetingCardDark]}>
-          <Text style={[s.greetingTitle, isDark&&{color:'#e2e8f0'}]}>Hola, {userName} 👋</Text>
-          <Text style={[s.greetingSub, isDark&&{color:'#94a3b8'}]}>¿A dónde te llevamos hoy de forma sostenible?</Text>
+          <Text style={[s.greetingTitle, isDark&&{color:'#e2e8f0'}]}>{t('home.hello')}, {userName} 👋</Text>
+          <Text style={[s.greetingSub, isDark&&{color:'#94a3b8'}]}>{t('home.greetingSub')}</Text>
           <View style={s.statsGrid}>
             <View style={[s.statCard, isDark&&s.statCardDark]}>
               <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(16,185,129,0.2)'}]}><Ionicons name="leaf" size={20} color={isDark?'#34D399':'#fff'} /></View>
               <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>12.4 kg</Text>
-              <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>CO₂ evitado</Text>
+              <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statCo2')}</Text>
             </View>
             <View style={[s.statCard, isDark&&s.statCardDark]}>
               <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(6,182,214,0.2)'}]}><Ionicons name="navigate" size={20} color={isDark?'#22d3ee':'#fff'} /></View>
               <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>24</Text>
-              <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>Viajes</Text>
+              <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statTrips')}</Text>
             </View>
             <View style={[s.statCard, isDark&&s.statCardDark]}>
               <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(168,85,247,0.2)'}]}><Ionicons name="time" size={20} color={isDark?'#c084fc':'#fff'} /></View>
               <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>18h</Text>
-              <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>Tiempo</Text>
+              <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statTime')}</Text>
             </View>
             <View style={[s.statCard, isDark&&s.statCardDark]}>
               <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(244,63,94,0.2)'}]}><Ionicons name="heart" size={20} color={isDark?'#fb7185':'#fff'} /></View>
               <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>8</Text>
-              <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>Favoritos</Text>
+              <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statFavs')}</Text>
             </View>
           </View>
         </View>
 
         <View style={s.toolsHeader}>
-          <Text style={[s.toolsTitle, isDark&&{color:'#e2e8f0'}]}>Herramientas</Text>
-          <Text style={[s.toolsCount, isDark&&{color:'#94a3b8'}]}>{MODULES.length} módulos</Text>
+          <Text style={[s.toolsTitle, isDark&&{color:'#e2e8f0'}]}>{t('home.tools')}</Text>
+          <Text style={[s.toolsCount, isDark&&{color:'#94a3b8'}]}>{MODULES.length} {t('home.modulesCount')}</Text>
         </View>
 
         <View style={s.modulesGrid}>
@@ -82,20 +82,20 @@ export default function HomeScreen() {
               <View style={[s.moduleIcon, isDark&&{backgroundColor:`${m.colors[0]}33`}]}>
                 <Ionicons name={m.icon as any} size={24} color={isDark?m.colors[0]:'#fff'} />
               </View>
-              <Text style={[s.moduleTitle, isDark&&{color:'#e2e8f0'}]}>{m.title}</Text>
-              <Text style={[s.moduleSub, isDark&&{color:'#94a3b8'}]}>{m.subtitle}</Text>
+              <Text style={[s.moduleTitle, isDark&&{color:'#e2e8f0'}]}>{t(m.titleKey)}</Text>
+              <Text style={[s.moduleSub, isDark&&{color:'#94a3b8'}]}>{t(m.subKey)}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
         <View style={[s.impactCard, isDark&&{backgroundColor:'#064e3b'}]}>
           <View style={s.impactIcon}><Ionicons name="leaf" size={26} color="#fff" /></View>
-          <Text style={s.impactTitle}>Tu impacto importa</Text>
-          <Text style={s.impactDesc}>Cada kilómetro a pie evita <Text style={{fontWeight:'700',color:'#fff'}}>0.21 kg de CO₂</Text> frente al carro.</Text>
-          <TouchableOpacity onPress={()=>router.push('/(tabs)/stats')} style={s.impactBtn}><Text style={s.impactBtnText}>Ver estadísticas</Text></TouchableOpacity>
+          <Text style={s.impactTitle}>{t('home.impactCardTitle')}</Text>
+          <Text style={s.impactDesc}>{t('home.impactDescBefore')}<Text style={{fontWeight:'700',color:'#fff'}}>{t('home.impactCo2')}</Text>{t('home.impactDescAfter')}</Text>
+          <TouchableOpacity onPress={()=>router.push('/(tabs)/stats')} style={s.impactBtn}><Text style={s.impactBtnText}>{t('home.seeStats')}</Text></TouchableOpacity>
         </View>
 
-        <View style={s.footer}><Ionicons name="leaf" size={14} color="#10b981" /><Text style={[s.footerText, isDark&&{color:'#94a3b8'}]}>Cada viaje sostenible cuenta</Text></View>
+        <View style={s.footer}><Ionicons name="leaf" size={14} color="#10b981" /><Text style={[s.footerText, isDark&&{color:'#94a3b8'}]}>{t('home.footerNote')}</Text></View>
       </ScrollView>
     </View>
   );

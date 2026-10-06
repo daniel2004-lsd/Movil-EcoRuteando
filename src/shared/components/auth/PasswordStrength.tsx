@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts } from '../../theme';
+import { useLanguage } from '../../store/LanguageContext';
 
 export type PwChecks = {
   length:  boolean;
@@ -17,19 +18,21 @@ export const getPwChecks = (pw: string): PwChecks => ({
 });
 
 export function PwRequirements({ checks }: { checks: PwChecks }) {
+  const { t } = useLanguage();
   return (
     <View style={s.reqs}>
-      <Req ok={checks.length}  label="Mínimo 8 caracteres" />
-      <Req ok={checks.upper}   label="Una letra mayúscula" />
-      <Req ok={checks.number}  label="Un número" />
-      <Req ok={checks.special} label="Un carácter especial (!@#$...)" />
+      <Req ok={checks.length}  label={t('auth.passwordMin')} />
+      <Req ok={checks.upper}   label={t('auth.pwCheckUppercase')} />
+      <Req ok={checks.number}  label={t('auth.pwCheckNumber')} />
+      <Req ok={checks.special} label={t('auth.pwCheckSpecial')} />
     </View>
   );
 }
 
 export function PasswordStrengthBar({ checks }: { checks: PwChecks }) {
+  const { t } = useLanguage();
   const score = Object.values(checks).filter(Boolean).length;
-  const labels    = ['', 'Débil', 'Regular', 'Fuerte', 'Muy fuerte'];
+  const labels    = ['', t('pw.weak'), t('pw.regular'), t('pw.strong'), t('pw.veryStrong')];
   const barColors = ['#e5e7eb', '#ef4444', '#f97316', '#22c55e', '#16a34a'];
   return (
     <View style={s.strengthRow}>

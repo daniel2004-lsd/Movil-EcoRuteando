@@ -22,12 +22,14 @@ import { useRouter } from 'expo-router';
 import { spacing } from '../../src/shared/theme';
 import apiClient from '../../src/shared/services/apiClient';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
+import { useLanguage } from '../../src/shared/store/LanguageContext';
 
 const screenWidth = Dimensions.get('window').width;
 
 export default function StatsScreen() {
   const router = useRouter();
   const { theme } = useThemeMode();
+  const { t } = useLanguage();
   const isDark = theme === 'dark';
 
   const insets = useSafeAreaInsets();
@@ -49,7 +51,7 @@ export default function StatsScreen() {
 
   // 1) Línea: CO₂ por mes
   const co2Data = {
-    labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'],
+    labels: [t('stats.jan'), t('stats.feb'), t('stats.mar'), t('stats.apr'), t('stats.may'), t('stats.jun')],
     datasets: [
       {
         data: [3.2, 4.1, 5.0, 4.6, 6.2, 5.8],
@@ -61,19 +63,19 @@ export default function StatsScreen() {
 
   // 2) Barra vertical: número de trayectos
   const tripsData = {
-    labels: ['Caminar', 'Taxi'],
+    labels: [t('stats.modeWalk'), t('planRoute.taxi')],
     datasets: [{ data: [7, 5] }],
   };
 
   // 3) Anillo de progreso: tiempo relativo por modo
   const timeProgressData = {
-    labels: ['Caminar', 'Taxi'],
+    labels: [t('stats.modeWalk'), t('planRoute.taxi')],
     data: [0.61, 0.39],
   };
 
   // 4) Anillos eco vs carro (proporción de CO₂)
   const co2CompareProgressData = {
-    labels: ['Ruta eco', 'Carro'],
+    labels: [t('stats.routeEco'), t('stats.modeCar')],
     data: [0.21, 0.79], // 0.9 frente a 3.4 aprox
   };
 
@@ -155,16 +157,15 @@ export default function StatsScreen() {
                     size={18}
                     color="#bbf7d0"
                   />
-                  <Text style={s.backText}>Volver</Text>
+                  <Text style={s.backText}>{t('common.back')}</Text>
                 </TouchableOpacity>
 
                 <View style={s.headerTextBlock}>
                   <Text style={s.title}>
-                    Estadísticas de tu movilidad
+                    {t('stats.title')}
                   </Text>
                   <Text style={s.subtitle}>
-                    Visualiza tu impacto ecológico, tus hábitos de trayectos y
-                    descarga tus datos para reportes.
+                    {t('stats.subtitle')}
                   </Text>
                 </View>
               </View>
@@ -208,7 +209,7 @@ export default function StatsScreen() {
                 />
                 <View style={s.summaryTextBlock}>
                   <Text style={s.summaryLabel}>
-                    CO₂ evitado este mes
+                    {t('stats.co2ThisMonth')}
                   </Text>
                   <Text style={s.summaryValue}>{liveStats?.co2SavedKg ? `${Number(liveStats.co2SavedKg).toFixed(1)} kg` : '6.2 kg'}</Text>
                 </View>
@@ -222,7 +223,7 @@ export default function StatsScreen() {
                 />
                 <View style={s.summaryTextBlock}>
                   <Text style={s.summaryLabel}>
-                    Trayectos ecológicos
+                    {t('stats.ecoTrips')}
                   </Text>
                   <Text style={s.summaryValue}>{liveStats?.totalTrips ?? 24}</Text>
                 </View>
@@ -242,7 +243,7 @@ export default function StatsScreen() {
                   isDark && s.sectionTitleDark,
                 ]}
               >
-                CO₂ evitado por mes (kg)
+                {t('stats.co2PerMonth')}
               </Text>
               <Text
                 style={[
@@ -250,8 +251,7 @@ export default function StatsScreen() {
                   isDark && s.sectionHelpDark,
                 ]}
               >
-                Seguimiento de cuánto CO₂ has dejado de emitir gracias a tus
-                rutas sostenibles.
+                {t('stats.co2PerMonthDesc')}
               </Text>
 
               <View style={s.chartWrapper}>
@@ -279,7 +279,7 @@ export default function StatsScreen() {
                   isDark && s.sectionTitleDark,
                 ]}
               >
-                Distribución de trayectos por modo
+                {t('stats.modeDistribution')}
               </Text>
               <Text
                 style={[
@@ -287,8 +287,7 @@ export default function StatsScreen() {
                   isDark && s.sectionHelpDark,
                 ]}
               >
-                Comparación de cuántos trayectos realizas
-                caminando y en taxi.
+                {t('stats.modeDistributionDesc')}
               </Text>
 
               <View style={s.chartWrapper}>
@@ -317,7 +316,7 @@ export default function StatsScreen() {
                   isDark && s.sectionTitleDark,
                 ]}
               >
-                Tiempo relativo por modo
+                {t('stats.timePerMode')}
               </Text>
               <Text
                 style={[
@@ -325,8 +324,7 @@ export default function StatsScreen() {
                   isDark && s.sectionHelpDark,
                 ]}
               >
-                Proporción aproximada del tiempo total que dedicas a cada modo
-                de transporte.
+                {t('stats.timePerModeDesc')}
               </Text>
 
               <View style={s.chartWrapperCenter}>
@@ -356,7 +354,7 @@ export default function StatsScreen() {
                   isDark && s.sectionTitleDark,
                 ]}
               >
-                CO₂ por trayecto: eco vs carro
+                {t('stats.co2PerTrip')}
               </Text>
               <Text
                 style={[
@@ -364,8 +362,7 @@ export default function StatsScreen() {
                   isDark && s.sectionHelpDark,
                 ]}
               >
-                Proporción de emisiones en una ruta promedio usando opciones
-                eco frente a un carro particular.
+                {t('stats.co2PerTripDesc')}
               </Text>
 
               <View style={s.chartWrapperCenter}>
@@ -403,7 +400,7 @@ export default function StatsScreen() {
                   isDark && s.sectionTitleDark,
                 ]}
               >
-                Resumen detallado (ejemplo)
+                {t('stats.detailedSummary')}
               </Text>
 
               <View style={s.detailRow}>
@@ -414,7 +411,7 @@ export default function StatsScreen() {
                 />
                 <View style={s.detailTextBlock}>
                   <Text style={s.detailLabel}>
-                    Kilómetros en taxi
+                    {t('stats.taxiKm')}
                   </Text>
                   <Text style={s.detailValue}>15.4 km</Text>
                 </View>
@@ -428,7 +425,7 @@ export default function StatsScreen() {
                 />
                 <View style={s.detailTextBlock}>
                   <Text style={s.detailLabel}>
-                    Tiempo total en trayectos
+                    {t('stats.totalTime')}
                   </Text>
                   <Text style={s.detailValue}>18 h 24 min</Text>
                 </View>

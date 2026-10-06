@@ -22,6 +22,7 @@ import Constants from 'expo-constants';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
+import { useLanguage } from '../../src/shared/store/LanguageContext';
 import { TAB_BAR_HEIGHT } from '../../src/shared/theme';
 import { useAuth } from '../../src/shared/store/AuthContext';
 import { MapSearchPanel } from '../../src/components/maps/MapSearchPanel';
@@ -90,6 +91,7 @@ const ROUTE_FIT_PADDING = {
 export default function PlanRouteScreen() {
   const router = useRouter();
   const { theme } = useThemeMode();
+  const { t } = useLanguage();
   const { auth } = useAuth();
   const isGuest = !!auth.guest;
   const isDark = theme === 'dark';
@@ -97,11 +99,11 @@ export default function PlanRouteScreen() {
 
   const requireAccount = (action: string) => {
     Alert.alert(
-      'Necesitas una cuenta',
-      `Para ${action} inicia sesión o crea una cuenta gratis.`,
+      t('planRoute.needAccountTitle'),
+      t('planRoute.needAccountMsg').replace('{action}', action),
       [
-        { text: 'Ahora no', style: 'cancel' },
-        { text: 'Iniciar sesión', onPress: () => router.push('/(auth)/login') },
+        { text: t('planRoute.notNow'), style: 'cancel' },
+        { text: t('auth.loginButton'), onPress: () => router.push('/(auth)/login') },
       ]
     );
   };
@@ -179,7 +181,7 @@ export default function PlanRouteScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permiso denegado', 'No se pudo acceder a tu ubicación');
+        Alert.alert(t('planRoute.permissionDeniedTitle'), t('planRoute.locationDeniedMsg'));
         return;
       }
 
@@ -187,11 +189,11 @@ export default function PlanRouteScreen() {
       const userLocation: PlacePoint = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-        name: 'Mi ubicación',
+        name: t('planRoute.myLocation'),
       };
       setUserPos(userLocation);
       setOrigin(userLocation);
-      setOriginQuery('Mi ubicación');
+      setOriginQuery(t('planRoute.myLocation'));
       setRegion({
         latitude: userLocation.latitude,
         longitude: userLocation.longitude,
@@ -280,7 +282,7 @@ export default function PlanRouteScreen() {
   ) => {
     if (!o || !d) {
       console.log('[RUTA] calculateRoute sin origen/destino | o=', !!o, 'd=', !!d);
-      Alert.alert('Error', 'Selecciona origen y destino');
+      Alert.alert(t('auth.errorTitle'), t('planRoute.selectOriginDest'));
       return;
     }
 
@@ -360,12 +362,12 @@ export default function PlanRouteScreen() {
           selectedMode
         ).then(setEstimate);
       } else {
-        Alert.alert('Error', 'No se encontró una ruta');
+        Alert.alert(t('auth.errorTitle'), t('planRoute.routeNotFound'));
       }
     } catch (error) {
       console.error('Error calculating route:', error);
       console.log('[RUTA] ERROR:', JSON.stringify((error as any)?.message ?? String(error)));
-      Alert.alert('Error', 'No se pudo calcular la ruta');
+      Alert.alert(t('auth.errorTitle'), t('planRoute.routeCalcError'));
     } finally {
       setLoading(false);
     }
@@ -407,11 +409,11 @@ export default function PlanRouteScreen() {
   const buildSavePayload = (o: PlacePoint, d: PlacePoint) => {
     const { distanceKm, durationMin } = routeMetrics();
     return {
-      name: `${o.name || 'Origen'} → ${d.name || 'Destino'}`,
-      description: 'Ruta calculada desde la app móvil',
+      name: `${o.name || t('planRoute.origin')} → ${d.name || t('planRoute.destination')}`,
+      description: t('planRoute.routeFromApp'),
       transportType: mode === 'driving' ? 'car' : 'walking',
-      startName: o.name || 'Origen',
-      destinationName: d.name || 'Destino',
+      startName: o.name || t('planRoute.origin'),
+      destinationName: d.name || t('planRoute.destination'),
       startLat: o.latitude,
       startLng: o.longitude,
       endLat: d.latitude,
@@ -441,19 +443,19 @@ export default function PlanRouteScreen() {
 
   const startTripFlow = async () => {
     console.log('[VIAJE] tap Iniciar viaje | route=', !!route, 'origin=', !!origin, 'dest=', !!destination, 'starting=', startingTrip);
-    if (isGuest) return requireAccount('iniciar y registrar viajes');
+    if (isGuest) return requireAccount(t('planRoute.actionStartTrips'));
     if (!route || !origin || !destination || startingTrip) {
       if (!origin || !destination) {
         const fallbackOrigin = route?.steps?.[0]?.startLocation;
         const fallbackDest = route?.steps?.[route.steps.length - 1]?.endLocation;
         if (fallbackOrigin?.latitude && fallbackDest?.latitude) {
-          const o = origin ?? { ...fallbackOrigin, name: originQuery || 'Origen' };
-          const d = destination ?? { ...fallbackDest, name: destQuery || 'Destino' };
+          const o = origin ?? { ...fallbackOrigin, name: originQuery || t('planRoute.origin') };
+          const d = destination ?? { ...fallbackDest, name: destQuery || t('planRoute.destination') };
           if (!origin) setOrigin(o);
           if (!destination) setDestination(d);
           return startTripFlowWith(o, d);
         }
-        setTripError('Faltan origen o destino para iniciar el viaje');
+        setTripError(t('planRoute.missingOriginDest'));
         return;
       }
       return;
@@ -486,11 +488,11 @@ export default function PlanRouteScreen() {
       lastRecenterRef.current = null;
       preAlertRef.current.clear();
       const firstStep = route?.steps?.[0];
-      speak(`Navegación iniciada hacia ${d.name}.${firstStep?.instruction ? ' ' + firstStep.instruction : ''}`);
+      speak(t('planRoute.navStartedSpeak').replace('{name}', d.name) + (firstStep?.instruction ? ' ' + firstStep.instruction : ''));
       console.log('[VIAJE] iniciado id=', started.id, 'steps=', route?.steps?.length ?? 0);
     } catch (err: any) {
       console.log('[VIAJE] ERROR iniciar:', JSON.stringify(err?.response?.data ?? err?.message));
-      setTripError(err?.response?.data?.detail || err?.response?.data?.message || err?.message || 'Error iniciando el viaje');
+      setTripError(err?.response?.data?.detail || err?.response?.data?.message || err?.message || t('planRoute.startTripError'));
     } finally {
       setStartingTrip(false);
     }
@@ -515,15 +517,15 @@ export default function PlanRouteScreen() {
       lastRecenterRef.current = null;
       Speech.stop();
       Alert.alert(
-        '¡Viaje completado!',
-        'Tu trayecto quedó registrado en el historial.',
+        t('planRoute.tripCompletedTitle'),
+        t('planRoute.tripCompletedMsg'),
         [
-          { text: 'Cerrar' },
-          { text: 'Ver historial', onPress: () => router.push('/(tabs)/history') },
+          { text: t('planRoute.close') },
+          { text: t('planRoute.viewHistory'), onPress: () => router.push('/(tabs)/history') },
         ]
       );
     } catch (err: any) {
-      setTripError(err?.response?.data?.message || err?.message || 'Error completando el viaje');
+      setTripError(err?.response?.data?.message || err?.message || t('planRoute.tripErrorFallback'));
     } finally {
       setCompleting(false);
     }
@@ -568,7 +570,7 @@ export default function PlanRouteScreen() {
     const p: PlacePoint = {
       latitude: coords.latitude,
       longitude: coords.longitude,
-      name: 'Mi ubicación',
+      name: t('planRoute.myLocation'),
     };
     setUserPos(p);
 
@@ -611,10 +613,10 @@ export default function PlanRouteScreen() {
       setCurrentStepIndex(steps.length);
       setRegion({ ...p, latitudeDelta: 0.005, longitudeDelta: 0.005 });
       lastRecenterRef.current = p;
-      speak('Has llegado a tu destino. Puedes completar el viaje.');
-      Alert.alert('¡Has llegado!', 'Tu trayecto llegó al destino. ¿Completar el viaje?', [
-        { text: 'Después' },
-        { text: 'Completar viaje', onPress: () => completeTripFlowRef.current() },
+      speak(t('planRoute.arrivedSpeak'));
+      Alert.alert(t('planRoute.arrivedAlertTitle'), t('planRoute.arrivedAlertMsg'), [
+        { text: t('planRoute.later') },
+        { text: t('planRoute.completeTrip'), onPress: () => completeTripFlowRef.current() },
       ]);
       return;
     }
@@ -754,7 +756,7 @@ export default function PlanRouteScreen() {
     setDestQuery(place.name);
     closePoiSheet();
     if (!origin) {
-      Alert.alert('Error', 'Selecciona el origen para calcular la ruta');
+      Alert.alert(t('common.errorTitle'), t('planRoute.selectOrigin'));
       openSearch();
       return;
     }
@@ -801,7 +803,7 @@ export default function PlanRouteScreen() {
   };
 
   const shareRoute = async () => {
-    if (isGuest) return requireAccount('compartir rutas');
+    if (isGuest) return requireAccount(t('planRoute.actionShare'));
     if (!route || !origin || !destination) return;
     try {
       await Share.share({
@@ -816,19 +818,19 @@ export default function PlanRouteScreen() {
   };
 
   const saveCurrentRoute = async () => {
-    if (isGuest) return requireAccount('guardar rutas');
+    if (isGuest) return requireAccount(t('planRoute.actionSave'));
     if (!route || !origin || !destination || routeSaved) return;
     try {
       const rid = routeSavedId ?? (await saveRouteSmart(buildSavePayload(origin, destination)));
       setRouteSavedId(rid);
       setRouteSaved(true);
       if (Platform.OS === 'android') {
-        ToastAndroid.show('Ruta guardada', ToastAndroid.SHORT);
+        ToastAndroid.show(t('planRoute.routeSaved'), ToastAndroid.SHORT);
       } else {
-        Alert.alert('Ruta guardada', 'La ruta quedó en tu historial de rutas.');
+        Alert.alert(t('planRoute.routeSaved'), t('planRoute.routeSavedMsg'));
       }
     } catch (e: any) {
-      Alert.alert('No se pudo guardar', e?.message ?? 'Error inesperado');
+      Alert.alert(t('planRoute.saveError'), e?.message ?? t('planRoute.unexpectedError'));
     }
   };
 
@@ -850,7 +852,7 @@ export default function PlanRouteScreen() {
   };
 
   const voteOnReport = async (report: NearbyReport, confirm: boolean) => {
-    if (isGuest) return requireAccount('votar reportes');
+    if (isGuest) return requireAccount(t('planRoute.actionVote'));
     if (votingId) return;
     let pos = userPos;
     if (!pos) {
@@ -861,14 +863,14 @@ export default function PlanRouteScreen() {
           pos = {
             latitude: loc.coords.latitude,
             longitude: loc.coords.longitude,
-            name: 'Mi ubicación',
+            name: t('planRoute.myLocation'),
           };
           setUserPos(pos);
         }
       } catch {}
     }
     if (!pos) {
-      Alert.alert('Ubicación requerida', 'Activa tu ubicación para votar reportes cercanos.');
+      Alert.alert(t('planRoute.locationRequiredTitle'), t('planRoute.voteLocationMsg'));
       return;
     }
     setVotingId(report.id);
@@ -891,16 +893,16 @@ export default function PlanRouteScreen() {
       );
       setSelectedReport(null);
       const msg = confirm
-        ? 'Confirmaste que sigue ocurriendo'
-        : 'Marcaste que ya no ocurre';
+        ? t('planRoute.voteConfirmed')
+        : t('planRoute.voteRejected');
       if (Platform.OS === 'android') {
         ToastAndroid.show(msg, ToastAndroid.SHORT);
       } else {
-        Alert.alert('Gracias por votar', msg);
+        Alert.alert(t('planRoute.voteThanks'), msg);
       }
       console.log('[REPORTS] voto', confirm ? '👍' : '👎', report.id, '→', result.state, result.confidenceScore);
     } catch (e: any) {
-      Alert.alert('No se pudo votar', e?.message ?? 'Error inesperado');
+      Alert.alert(t('planRoute.voteError'), e?.message ?? t('planRoute.unexpectedError'));
     } finally {
       setVotingId(null);
     }
@@ -988,8 +990,8 @@ export default function PlanRouteScreen() {
   const navSteps: any[] = route?.steps || [];
   const navStep = currentStepIndex < navSteps.length ? navSteps[currentStepIndex] : null;
   const navInstruction = arrived
-    ? 'Has llegado a tu destino'
-    : navStep?.instruction || 'Continúa hasta el destino';
+    ? t('planRoute.navArrived')
+    : navStep?.instruction || t('planRoute.navContinue');
   const navTarget =
     navStep?.endLocation?.latitude != null ? navStep.endLocation : destination;
   const navDistText =
@@ -1041,14 +1043,14 @@ export default function PlanRouteScreen() {
           />
         )}
         {origin && (
-          <Marker coordinate={origin} title="Origen" description={origin.name}>
+          <Marker coordinate={origin} title={t('planRoute.origin')} description={origin.name}>
             <View style={styles.originMarker}>
               <View style={styles.markerPin} />
             </View>
           </Marker>
         )}
         {destination && (
-          <Marker coordinate={destination} title="Destino" description={destination.name}>
+          <Marker coordinate={destination} title={t('planRoute.destination')} description={destination.name}>
             <View style={styles.destMarker}>
               <View style={styles.markerPinRed} />
             </View>
@@ -1089,7 +1091,7 @@ export default function PlanRouteScreen() {
                       color="#1a73e8"
                     />
                     <Text style={styles.poiCalloutAction}>
-                      {pickingStop ? 'Agregar como parada' : 'Cómo llegar'}
+                      {pickingStop ? t('planRoute.addAsStop') : t('planRoute.howToGet')}
                     </Text>
                   </View>
                 </View>
@@ -1139,10 +1141,10 @@ export default function PlanRouteScreen() {
             );
             const label =
               diffMin > 0
-                ? `${diffMin} min más lento`
+                ? t('planRoute.minSlower').replace('{n}', String(diffMin))
                 : diffMin < 0
-                ? `${-diffMin} min más rápido`
-                : 'Mismo tiempo';
+                ? t('planRoute.minFaster').replace('{n}', String(-diffMin))
+                : t('planRoute.sameTime');
             return (
               <React.Fragment key={`alt-${ai}`}>
                 <Polyline
@@ -1240,7 +1242,7 @@ export default function PlanRouteScreen() {
                   size={16}
                   color={active ? '#fff' : '#5f6368'}
                 />
-                <Text style={[styles.modeText, active && { color: '#fff' }]}>{m.label}</Text>
+                <Text style={[styles.modeText, active && { color: '#fff' }]}>{t(`modes.${m.id}`)}</Text>
               </TouchableOpacity>
             );
           })}
@@ -1309,7 +1311,7 @@ export default function PlanRouteScreen() {
             >
               <Ionicons name="chevron-up" size={18} color="#16a34a" />
               <Text style={styles.expandSheetFabText}>
-                {route?.duration?.text ? `${route.duration.text} · Ver ruta` : 'Ver ruta'}
+                {route?.duration?.text ? `${route.duration.text} · ${t('planRoute.viewRoute')}` : t('planRoute.viewRoute')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1320,13 +1322,13 @@ export default function PlanRouteScreen() {
         <TouchableOpacity
           style={[styles.reportFab, { bottom: fabBottom }]}
           onPress={() => {
-            if (isGuest) return requireAccount('reportar obstáculos');
+            if (isGuest) return requireAccount(t('planRoute.actionReport'));
             setReportSheetOpen(true);
           }}
           activeOpacity={0.85}
         >
           <Ionicons name="warning" size={18} color="#d93025" />
-          <Text style={styles.reportFabText}>Reportar</Text>
+          <Text style={styles.reportFabText}>{t('planRoute.report')}</Text>
         </TouchableOpacity>
       )}
 
@@ -1437,7 +1439,7 @@ export default function PlanRouteScreen() {
             onShare={shareRoute}
             onSave={saveCurrentRoute}
             onReport={() => {
-              if (isGuest) return requireAccount('reportar obstáculos');
+              if (isGuest) return requireAccount(t('planRoute.actionReport'));
               setReportSheetOpen(true);
             }}
             routeSaved={routeSaved}
