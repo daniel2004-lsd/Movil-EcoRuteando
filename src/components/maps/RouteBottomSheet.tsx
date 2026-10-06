@@ -51,6 +51,8 @@ interface RouteBottomSheetProps {
 
 const snapPoints = ['25%', '50%', '90%'];
 
+import { useLanguage } from '../../shared/store/LanguageContext';
+
 export function RouteBottomSheet({
   route,
   estimate,
@@ -76,6 +78,7 @@ export function RouteBottomSheet({
   bottomInset = 0,
   contentHeight,
 }: RouteBottomSheetProps) {
+  const { t } = useLanguage();
   const handleModePress = (mode: string) => {
     console.log('[SHEET] modo solicitado:', mode);
     onModePress?.(mode);
@@ -99,7 +102,7 @@ export function RouteBottomSheet({
     const d = new Date(Date.now() + secs * 1000);
     let h = d.getHours();
     const m = d.getMinutes().toString().padStart(2, '0');
-    const period = h >= 12 ? 'p. m.' : 'a. m.';
+    const period = h >= 12 ? t('routeSheet.pm') : t('routeSheet.am');
     h = h % 12 || 12;
     return `${h}:${m} ${period}`;
   })();
@@ -168,7 +171,7 @@ export function RouteBottomSheet({
                     color={isActive ? '#16a34a' : '#6b7280'}
                   />
                 <Text style={[styles.modeLabel, isActive && styles.modeLabelActive]}>
-                  {mode.label}
+                  {t(`modes.${mode.id}`)}
                 </Text>
               </TouchableOpacity>
                 );
@@ -180,7 +183,7 @@ export function RouteBottomSheet({
                   activeOpacity={0.7}
                 >
                   <Ionicons name="warning-outline" size={18} color="#d93025" />
-                  <Text style={[styles.modeLabel, styles.modeLabelReport]}>Reportar</Text>
+                  <Text style={[styles.modeLabel, styles.modeLabelReport]}>{t('planRoute.report')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -188,7 +191,7 @@ export function RouteBottomSheet({
             {/* Alternative routes */}
             {routes && routes.length > 1 && (
               <View style={styles.alternativesSection}>
-                <Text style={styles.alternativesTitle}>Otras rutas</Text>
+                <Text style={styles.alternativesTitle}>{t('routeSheet.otherRoutes')}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.alternativesScroll}>
                   {routes.map((r, i) => {
                     const baseDur = routes[selectedRouteIndex]?.duration?.value;
@@ -202,10 +205,10 @@ export function RouteBottomSheet({
                       diffMin == null
                         ? null
                         : diffMin > 0
-                        ? `+${diffMin} min más lento`
+                        ? '+' + t('planRoute.minSlower').replace('{n}', String(diffMin))
                         : diffMin < 0
-                        ? `${-diffMin} min más rápido`
-                        : 'Mismo tiempo';
+                        ? t('planRoute.minFaster').replace('{n}', String(-diffMin))
+                        : t('planRoute.sameTime');
                     return (
                     <TouchableOpacity
                       key={i}
@@ -229,7 +232,7 @@ export function RouteBottomSheet({
           {/* Turn by turn */}
           {route?.steps && route.steps.length > 0 && (
             <View style={styles.stepsSection}>
-              <Text style={styles.stepsTitle}>Indicaciones</Text>
+              <Text style={styles.stepsTitle}>{t('routeSheet.directions')}</Text>
               {route.steps.map((step: any, i: number) => (
                 <TouchableOpacity key={i} style={styles.stepItem} onPress={() => {}}>
                   <View style={styles.stepIconWrapper}>
@@ -272,7 +275,7 @@ export function RouteBottomSheet({
                 <View style={styles.actionCircle}>
                   <Ionicons name="location" size={20} color="#1a73e8" />
                 </View>
-                <Text style={styles.actionLabel}>Agregar paradas</Text>
+                <Text style={styles.actionLabel}>{t('routeSheet.addStops')}</Text>
               </TouchableOpacity>
             )}
             {onShare && (
@@ -280,7 +283,7 @@ export function RouteBottomSheet({
                 <View style={styles.actionCircle}>
                   <Ionicons name="share-outline" size={20} color="#1a73e8" />
                 </View>
-                <Text style={styles.actionLabel}>Compartir</Text>
+                <Text style={styles.actionLabel}>{t('routeSheet.share')}</Text>
               </TouchableOpacity>
             )}
             {onSave && (
@@ -293,7 +296,7 @@ export function RouteBottomSheet({
                   />
                 </View>
                 <Text style={[styles.actionLabel, routeSaved && { color: '#16a34a' }]}>
-                  {routeSaved ? 'Guardada' : 'Guardar'}
+                  {routeSaved ? t('routeSheet.saved') : t('routeSheet.save')}
                 </Text>
               </TouchableOpacity>
             )}
@@ -307,7 +310,7 @@ export function RouteBottomSheet({
               <>
                 <View style={styles.inProgressChip}>
                   <View style={styles.inProgressDot} />
-                  <Text style={styles.inProgressText}>En curso</Text>
+                  <Text style={styles.inProgressText}>{t('routeSheet.inProgress')}</Text>
                 </View>
                 <TouchableOpacity
                   style={[styles.primaryBtn, styles.completeBtn]}
@@ -317,7 +320,7 @@ export function RouteBottomSheet({
                 >
                   <Ionicons name="checkmark-circle-outline" size={22} color="#fff" />
                   <Text style={styles.primaryBtnText}>
-                    {completing ? 'Completando...' : 'Completar'}
+                    {completing ? t('routeSheet.completing') : t('routeSheet.complete')}
                   </Text>
                 </TouchableOpacity>
               </>
@@ -334,12 +337,12 @@ export function RouteBottomSheet({
                 >
                   <Ionicons name="navigate-outline" size={22} color="#fff" />
                   <Text style={styles.primaryBtnText}>
-                    {startingTrip ? 'Iniciando...' : 'Iniciar viaje'}
+                    {startingTrip ? t('routeSheet.starting') : t('routeSheet.startTrip')}
                   </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.secondaryBtn} onPress={onClose} activeOpacity={0.9}>
-                  <Text style={styles.secondaryBtnText}>Cancelar</Text>
+                  <Text style={styles.secondaryBtnText}>{t('auth.cancel')}</Text>
                 </TouchableOpacity>
               </>
             )}

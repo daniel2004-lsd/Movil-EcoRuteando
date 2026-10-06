@@ -51,10 +51,10 @@ export default function FavoritesScreen() {
             const parts = name.split(/\s*→\s*/);
             return {
               id: r.routeId ?? r.id ?? `fav-${i}`,
-              routeName: name || 'Ruta favorita',
-              originAddress: r.originAddress ?? (parts[0] || name || 'Origen'),
+              routeName: name || t('favorites.defaultName'),
+              originAddress: r.originAddress ?? (parts[0] || name || t('favorites.origin')),
               destinationAddress:
-                r.destinationAddress ?? (parts[parts.length - 1] || 'Destino'),
+                r.destinationAddress ?? (parts[parts.length - 1] || t('favorites.destination')),
               transportMode: r.transportMode ?? r.transportType ?? 'car',
             };
           })
@@ -144,7 +144,7 @@ export default function FavoritesScreen() {
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={s.summaryLabel}>
-                    {t('favorites.focus')}
+                    {t('favorites.ecoFocus')}
                   </Text>
                   <Text style={s.summaryNumber}>
                     {t('favorites.ecoRoutes')}
@@ -161,7 +161,7 @@ export default function FavoritesScreen() {
                 <View style={{ alignItems: 'center', marginTop: 40 }}>
                   <Ionicons name="heart-outline" size={48} color="rgba(255,255,255,0.5)" />
                   <Text style={{ color: 'rgba(255,255,255,0.7)', marginTop: 12, fontFamily: 'Times New Roman' }}>
-                    No tienes rutas favoritas guardadas
+                    {t('favorites.empty')}
                   </Text>
                 </View>
               ) : favorites.map(route => (

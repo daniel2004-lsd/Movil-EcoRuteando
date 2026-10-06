@@ -31,7 +31,7 @@ type Trip = {
 export default function HistoryScreen() {
   const router = useRouter();
   const { auth } = useAuth();
-  const { t } = useLanguage();
+  const { t, t: tr } = useLanguage();
 
   const userEmail = auth.email ?? 'usuario@ecoruteando.com';
   const insets = useSafeAreaInsets();
@@ -51,8 +51,8 @@ export default function HistoryScreen() {
             const parts = name.split(/\s*→\s*/);
             return {
               id: t.usageId ?? t.id ?? `trip-${i}`,
-              originAddress: t.originAddress ?? (parts[0] || name || 'Origen'),
-              destinationAddress: t.destinationAddress ?? (parts[1] || 'Destino'),
+              originAddress: t.originAddress ?? (parts[0] || name || tr('history.origin')),
+              destinationAddress: t.destinationAddress ?? (parts[1] || tr('history.destination')),
               transportMode: t.transportMode ?? 'car',
               co2SavedKg: t.actualCo2Kg ?? t.co2SavedKg ?? 0,
               startedAt: t.startedAt ?? new Date().toISOString(),
@@ -184,7 +184,7 @@ export default function HistoryScreen() {
                 <View style={{ alignItems: 'center', marginTop: 40 }}>
                   <Ionicons name="time-outline" size={48} color="rgba(255,255,255,0.5)" />
                   <Text style={{ color: 'rgba(255,255,255,0.7)', marginTop: 12, fontFamily: 'Times New Roman' }}>
-                    No tienes trayectos registrados aun
+                    {t('history.empty')}
                   </Text>
                 </View>
               ) : trips.map((trip, index) => (
