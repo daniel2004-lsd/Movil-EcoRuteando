@@ -29,10 +29,10 @@ export default function LoginScreen() {
 
 
   const handleGoogleLogin = async () => {
-    const redirectUri = 'http://localhost';
+    const redirectUri = 'ecoruteando://';
     Alert.alert('Google','Abriendo '+redirectUri);
     try {
-      const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=409005111991-9psqs7t1e0hta1jijgno8eia00iv3v9n.apps.googleusercontent.com&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('openid email profile')}&response_type=token`;
+      const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('openid email profile')}&response_type=token`;
       const result:any = await WebBrowser.openAuthSessionAsync(url, redirectUri);
       let tok = result?.params?.access_token || (result as any)?.authentication?.accessToken;
       if(!tok && (result as any)?.url){ const m=(result as any).url.match(/[#&]access_token=([^&]+)/); if(m) tok=decodeURIComponent(m[1]); }
@@ -48,9 +48,9 @@ export default function LoginScreen() {
   const handleFacebookLogin = async () => {
     Alert.alert('Facebook','Click detectado');
     try {
-      const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
-      const url = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${process.env.EXPO_PUBLIC_FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=email`;
-      const result: any = await AuthSession.startAsync({ authUrl: url });
+    const redirectUri = AuthSession.makeRedirectUri();
+    const url = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${process.env.EXPO_PUBLIC_FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=email&response_type=token`;
+    const result:any = await WebBrowser.openAuthSessionAsync(url, redirectUri);
       if (result.type === 'success' && result.params?.access_token) {
         const { data } = await apiClient.post('/api/auth/oauth/login', { provider: 'facebook', accessToken: result.params.access_token });
         await signIn({ accessToken: data.accessToken, refreshToken: data.refreshToken, email: email.trim() || 'oauth@facebook.com' });
