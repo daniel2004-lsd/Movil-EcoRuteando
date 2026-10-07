@@ -82,6 +82,8 @@ export default function VerifyCodeScreen() {
         setAuth({
           email: String(email),
           role: 'user',
+          userId: null,
+          firstName: null,
         });
       }
 
@@ -161,7 +163,9 @@ export default function VerifyCodeScreen() {
               {code.map((v, i) => (
                 <TextInput
                   key={i}
-                  ref={ref => (inputs.current[i] = ref)}
+                  ref={ref => {
+                    inputs.current[i] = ref;
+                  }}
                   style={[
                     s.codeInput,
                     isDark && {

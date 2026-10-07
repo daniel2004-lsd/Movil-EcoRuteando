@@ -296,6 +296,8 @@ export default function StatsScreen() {
                   width={chartWidth}
                   height={220}
                   chartConfig={barChartConfig}
+                  yAxisLabel=""
+                  yAxisSuffix=""
                   fromZero
                   showValuesOnTopOfBars
                   style={s.chart}
