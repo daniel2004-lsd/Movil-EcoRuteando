@@ -186,7 +186,9 @@ export default function RecoverCodeScreen() {
               {code.map((v, i) => (
                 <TextInput
                   key={i}
-                  ref={ref => (inputs.current[i] = ref)}
+                  ref={ref => {
+                    inputs.current[i] = ref;
+                  }}
                   style={[
                     s.codeInput,
                     activeIndex === i && {
