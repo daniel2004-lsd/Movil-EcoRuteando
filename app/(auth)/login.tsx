@@ -1,5 +1,6 @@
 // app/(auth)/login.tsx — 100% igual a web Login.jsx
-import { View, Text, StyleSheet, Image, ScrollView, Alert, TouchableOpacity, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
+import { Dialog } from '../../src/shared/components/ui/AppDialog';
+import {  View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, TextInput  } from 'react-native';
 import React, { useState, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -10,7 +11,8 @@ import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useAuth } from '../../src/shared/store/AuthContext';
 import apiClient from '../../src/shared/services/apiClient';
 import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
+import { decodeJwtPayload } from '../../src/shared/utils/jwt';
+import * as Crypto from 'expo-crypto';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -29,34 +31,43 @@ export default function LoginScreen() {
 
 
   const handleGoogleLogin = async () => {
-    const redirectUri = 'ecoruteando://';
-    Alert.alert('Google','Abriendo '+redirectUri);
+    const redirectUri = 'com.ecoruteando.mobile:/auth/callback';
     try {
-      const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('openid email profile')}&response_type=token`;
+      const clientId = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '';
+      const bytes = await Crypto.getRandomBytesAsync(64);
+      const verifier = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      const b64 = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, verifier, { encoding: Crypto.CryptoEncoding.BASE64 });
+      const challenge = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('openid email profile')}&response_type=code&code_challenge=${challenge}&code_challenge_method=S256&state=google`;
       const result:any = await WebBrowser.openAuthSessionAsync(url, redirectUri);
-      let tok = result?.params?.access_token || (result as any)?.authentication?.accessToken;
-      if(!tok && (result as any)?.url){ const m=(result as any).url.match(/[#&]access_token=([^&]+)/); if(m) tok=decodeURIComponent(m[1]); }
-      if(result?.type==='success' && tok){
-        const {data}=await apiClient.post('/api/auth/oauth/login',{provider:'google',accessToken:tok});
-        // @ts-ignore
-        const emailForSign = typeof email !== 'undefined' ? (email as string).trim() : (typeof form !== 'undefined' ? (form as any).email?.trim() : 'oauth@google.com');
-        await signIn({accessToken:data.accessToken,refreshToken:data.refreshToken,email: emailForSign || 'oauth@google.com'});
-        router.replace('/(tabs)');
-      } else Alert.alert('Google','No: '+result?.type);
-    } catch(e:any){ Alert.alert('Google',String(e?.message||e)); }
-  };
-  const handleFacebookLogin = async () => {
-    Alert.alert('Facebook','Click detectado');
-    try {
-    const redirectUri = AuthSession.makeRedirectUri();
-    const url = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${process.env.EXPO_PUBLIC_FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=email&response_type=token`;
-    const result:any = await WebBrowser.openAuthSessionAsync(url, redirectUri);
-      if (result.type === 'success' && result.params?.access_token) {
-        const { data } = await apiClient.post('/api/auth/oauth/login', { provider: 'facebook', accessToken: result.params.access_token });
-        await signIn({ accessToken: data.accessToken, refreshToken: data.refreshToken, email: email.trim() || 'oauth@facebook.com' });
-        router.replace('/(tabs)');
-      }
-    } catch {}
+      if (result?.type !== 'success') { console.warn('[OAuth-Google] cancelado, type=', result?.type);
+      Dialog.alert(t('auth.oauthCancelledTitle'), t('auth.oauthCancelledMsg'), {
+        tone: 'info',
+        icon: 'hand-left',
+      }); return; }
+      const mc = String(result.url || '').match(/[?&]code=([^&]+)/);
+      if (!mc) { console.warn('[OAuth-Google] sin code_verifier/authorization code');
+      Dialog.alert(t('auth.oauthErrorTitle'), t('auth.oauthNoCode'), {
+        tone: 'error',
+      }); return; }
+      const body = 'client_id='+encodeURIComponent(clientId)+'&code='+encodeURIComponent(decodeURIComponent(mc[1]))+'&redirect_uri='+encodeURIComponent(redirectUri)+'&grant_type=authorization_code&code_verifier='+encodeURIComponent(verifier);
+      const tr = await fetch('https://oauth2.googleapis.com/token', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
+      const tj:any = await tr.json().catch(() => ({}));
+      const tok = tj.access_token;
+      if (!tok) { console.warn('[OAuth-Google] sin access_token:', tj.error_description || tj.error || tr.status);
+      Dialog.alert(t('auth.oauthErrorTitle'), t('auth.oauthNoToken'), {
+        tone: 'error',
+      }); return; }
+      const idp = (tj.id_token ? decodeJwtPayload(tj.id_token) : null) || {};
+      const {data}=await apiClient.post('/api/auth/oauth/login',{provider:'google',accessToken:tok});
+      const emailForSign = (typeof idp.email === 'string' ? idp.email.trim() : '') || 'oauth@google.com';
+      const firstNameForSign = (typeof idp.given_name === 'string' ? idp.given_name.trim() : '');
+      await signIn({accessToken:data.accessToken,refreshToken:data.refreshToken,email: emailForSign, firstName: firstNameForSign});
+      router.replace('/(tabs)');
+    } catch(e:any){ console.warn('[OAuth-Google] excepción:', e?.message || e);
+    Dialog.alert(t('auth.oauthErrorTitle'), t('auth.oauthNoToken'), {
+      tone: 'error',
+    }); }
   };
 
   useEffect(() => {
@@ -130,7 +141,6 @@ export default function LoginScreen() {
 
             <View style={s.socialRow}>
               <SocialBtn icon="logo-google" color="#EA4335" label="Google" disabled={retrySeconds>0} onPress={handleGoogleLogin} />
-              <SocialBtn icon="logo-facebook" color="#1877F2" label="Facebook" disabled={retrySeconds>0} onPress={handleFacebookLogin} />
             </View>
 
             <View style={s.registerRow}><Text style={[s.registerText, isDark && {color:'#94a3b8'}]}>{t('auth.noAccount')}</Text><TouchableOpacity onPress={()=>router.push('/(auth)/register')}><Text style={[s.registerLink, isDark && {color:'#34D399'}]}>{' '}{t('auth.registerHere')}</Text></TouchableOpacity></View>

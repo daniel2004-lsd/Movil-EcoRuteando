@@ -1,10 +1,13 @@
 // app/(tabs)/index.tsx — igual que web UserDashboard.jsx
+import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useAuth } from '../../src/shared/store/AuthContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
+import apiClient from '../../src/shared/services/apiClient';
+import { Dialog } from '../../src/shared/components/ui/AppDialog';
 
 const MODULES = [
   { id:'plan_ruta', icon:'map', titleKey:'home.modPlan', subKey:'home.modPlanSub', colors:['#10b981','#059669'] },
@@ -21,13 +24,74 @@ export default function HomeScreen() {
   const { auth, signOut } = useAuth();
   const { t } = useLanguage();
   const isDark = theme === 'dark';
-  const userName = auth.firstName || auth.email?.split('@')[0] || t('home.defaultUser');
+  const isGuest = !!auth.guest;
+
+  // El saludo toma SIEMPRE el nombre del perfil (/api/auth/me):
+  // si se edita en Perfil, al volver aquí queda actualizado.
+  const [profileName, setProfileName] = useState('');
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { data } = await apiClient.get('/api/auth/me');
+        const u = data?.user ?? data;
+        const full = `${u?.firstName ?? ''} ${u?.lastName ?? ''}`.trim();
+        if (active) setProfileName(full);
+      } catch {}
+    })();
+    return () => { active = false; };
+  }, []));
+
+  // Estadísticas reales del usuario (viajes + favoritos).
+  const [homeStats, setHomeStats] = useState<{
+    co2Kg: number; trips: number; minutes: number; favs: number;
+  } | null>(null);
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    if (isGuest) { setHomeStats(null); return; }
+    (async () => {
+      try {
+        const [tripsRes, favsRes] = await Promise.all([
+          apiClient.get('/api/trips'),
+          apiClient.get('/api/favorites'),
+        ]);
+        const items: any[] = Array.isArray(tripsRes.data) ? tripsRes.data : (tripsRes.data?.items ?? []);
+        const favItems: any[] = Array.isArray(favsRes.data) ? favsRes.data : (favsRes.data?.items ?? []);
+        if (!active) return;
+        const valid = items.filter(x => x && (x.usageId || x.id));
+        setHomeStats({
+          co2Kg: valid.reduce((a, x) => a + (Number(x.actualCo2Kg) || 0), 0),
+          trips: valid.length,
+          minutes: valid.reduce((a, x) => a + (Number(x.actualDurationMin) || 0), 0),
+          favs: favItems.filter(x => x && (x.routeId || x.id)).length,
+        });
+      } catch {}
+    })();
+    return () => { active = false; };
+  }, [isGuest]));
+
+  // Muestra: dato real si hay, "—" si no hay sesión o aún no cargó.
+  const stat = (v?: string) => (homeStats ? v : '—');
+  const co2Shown = stat(homeStats && homeStats.co2Kg > 0 ? `${homeStats.co2Kg.toFixed(1)} kg` : '0 kg');
+  const tripsShown = stat(homeStats ? String(homeStats.trips) : '—');
+  const timeShown = stat(homeStats ? `${Math.floor(homeStats.minutes / 60)} h` : '—');
+  const favsShown = stat(homeStats ? String(homeStats.favs) : '—');
+
+  // Se muestra solo la primera palabra del nombre del perfil.
+  const firstWord = (v?: string | null) => (v || '').trim().split(' ')[0] || '';
+  // Invitado: nombre neutro. Nunca datos de otra persona.
+  const userName = isGuest
+    ? t('home.guestUser')
+    : firstWord(profileName)
+      || firstWord(auth.firstName)
+      || (auth.email ? auth.email.split('@')[0] : '')
+      || t('home.defaultUser');
 
   return (
     <View style={[s.page, isDark && s.pageDark]}>
       <View style={[s.header, isDark && s.headerDark]}>
         <View style={s.headerLeft}>
-          <View style={s.logoBox}><Text style={s.logoIcon}>🌿</Text></View>
+          <View style={s.logoBox}><Ionicons name="leaf" size={20} color="#fff" /></View>
           <Text style={[s.headerTitle, isDark&&{color:'#e2e8f0'}]}>{t('common.appName')}</Text>
         </View>
         <TouchableOpacity onPress={async()=>{await signOut(); router.replace('/(auth)/login');}} style={[s.logoutBtn, isDark&&{backgroundColor:'#162329',borderColor:'#26383D'}]}>
@@ -43,22 +107,22 @@ export default function HomeScreen() {
           <View style={s.statsGrid}>
             <View style={[s.statCard, isDark&&s.statCardDark]}>
               <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(16,185,129,0.2)'}]}><Ionicons name="leaf" size={20} color={isDark?'#34D399':'#fff'} /></View>
-              <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>12.4 kg</Text>
+              <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>{co2Shown}</Text>
               <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statCo2')}</Text>
             </View>
             <View style={[s.statCard, isDark&&s.statCardDark]}>
               <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(6,182,214,0.2)'}]}><Ionicons name="navigate" size={20} color={isDark?'#22d3ee':'#fff'} /></View>
-              <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>24</Text>
+              <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>{tripsShown}</Text>
               <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statTrips')}</Text>
             </View>
             <View style={[s.statCard, isDark&&s.statCardDark]}>
               <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(168,85,247,0.2)'}]}><Ionicons name="time" size={20} color={isDark?'#c084fc':'#fff'} /></View>
-              <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>18h</Text>
+              <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>{timeShown}</Text>
               <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statTime')}</Text>
             </View>
             <View style={[s.statCard, isDark&&s.statCardDark]}>
               <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(244,63,94,0.2)'}]}><Ionicons name="heart" size={20} color={isDark?'#fb7185':'#fff'} /></View>
-              <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>8</Text>
+              <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>{favsShown}</Text>
               <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statFavs')}</Text>
             </View>
           </View>
@@ -72,11 +136,21 @@ export default function HomeScreen() {
         <View style={s.modulesGrid}>
           {MODULES.map(m=>(
             <TouchableOpacity key={m.id} onPress={()=>{
+              const needAccount = (action: string) => Dialog.alert(
+                t('planRoute.needAccountTitle'),
+                t('planRoute.needAccountMsg').replace('{action}', action),
+                [
+                  { text: t('planRoute.notNow'), style: 'cancel' },
+                  { text: t('auth.loginButton'), onPress: () => router.push('/(auth)/login') },
+                ],
+                { tone: 'info', icon: 'person-circle' }
+              );
               if(m.id==='plan_ruta') router.push('/(tabs)/plan-route');
-              else if(m.id==='historial') router.push('/(tabs)/history');
-              else if(m.id==='favoritos') router.push('/(tabs)/favorites');
-              else if(m.id==='perfil') router.push('/(tabs)/profile');
-              else if(m.id==='alertas') router.push('/(tabs)/plan-route');
+              else if(m.id==='mis_rutas') { if(isGuest) return needAccount(t('savedRoutes.title')); router.push('/(tabs)/saved-routes'); }
+              else if(m.id==='historial') { if(isGuest) return needAccount(t('tabs.history')); router.push('/(tabs)/history'); }
+              else if(m.id==='favoritos') { if(isGuest) return needAccount(t('tabs.favorites')); router.push('/(tabs)/favorites'); }
+              else if(m.id==='perfil') { if(isGuest) return needAccount(t('tabs.profile')); router.push('/(tabs)/profile'); }
+              else if(m.id==='alertas') { if(isGuest) return needAccount(t('alerts.title')); router.push('/(tabs)/alerts'); }
               else router.push('/(tabs)/plan-route');
             }} style={[s.moduleCard, isDark&&s.moduleCardDark]}>
               <View style={[s.moduleIcon, isDark&&{backgroundColor:`${m.colors[0]}33`}]}>

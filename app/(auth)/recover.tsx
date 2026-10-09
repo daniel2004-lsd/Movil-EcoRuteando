@@ -34,7 +34,7 @@ export default function RecoverScreen() {
       <LinearGradient colors={isDark ? ['#0B1215','#111C20'] : ['#ecfdf5','#f0fdf4','#ccfbf1']} style={s.bg}>
         <TouchableOpacity onPress={toggleTheme} style={[s.themeBtn, isDark&&s.themeBtnDark]}><Text>{isDark?'☀️':'🌙'}</Text></TouchableOpacity>
         <ScrollView contentContainerStyle={s.scrollCenter}>
-          <View style={s.logoWrap}><View style={[s.logoBox, isDark&&s.logoBoxDark]}><Text style={s.logoIcon}>🌿</Text></View><Text style={[s.appName, isDark&&{color:'#e2e8f0'}]}>{t('common.appName')}</Text></View>
+          <View style={s.logoWrap}><View style={[s.logoBox, isDark&&s.logoBoxDark]}><Ionicons name="leaf" size={26} color="#059669" /></View><Text style={[s.appName, isDark&&{color:'#e2e8f0'}]}>{t('common.appName')}</Text></View>
           <View style={[s.iconCircle, isDark&&{backgroundColor:'#064e3b'}]}><Ionicons name="mail" size={32} color={isDark?'#34D399':'#059669'} /></View>
           <Text style={[s.title, isDark&&{color:'#e2e8f0'}]}>{t('auth.recoverSentTitle')}</Text>
           <Text style={[s.sub, isDark&&{color:'#94a3b8'}]}>{t('auth.recoverSentSubtitle')}</Text>
@@ -52,7 +52,7 @@ export default function RecoverScreen() {
       <TouchableOpacity onPress={()=>router.replace('/')} style={s.backTop}><Ionicons name="arrow-back" size={14} color={isDark?'#94a3b8':'#6b7280'} /><Text style={[s.backTopText, isDark&&{color:'#94a3b8'}]}>{t('auth.back')}</Text></TouchableOpacity>
       <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':'height'}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-          <View style={s.logoWrap}><View style={[s.logoBox, isDark&&s.logoBoxDark]}><Text style={s.logoIcon}>🌿</Text></View><Text style={[s.appName, isDark&&{color:'#e2e8f0'}]}>{t('common.appName')}</Text></View>
+          <View style={s.logoWrap}><View style={[s.logoBox, isDark&&s.logoBoxDark]}><Ionicons name="leaf" size={26} color="#059669" /></View><Text style={[s.appName, isDark&&{color:'#e2e8f0'}]}>{t('common.appName')}</Text></View>
           <View style={[s.card, isDark&&s.cardDark]}>
             <Text style={[s.cardTitle, isDark&&{color:'#e2e8f0'}]}>{t('auth.recoverTitle')}</Text>
             <Text style={[s.cardSub, isDark&&{color:'#94a3b8'}]}>{t('auth.recoverSubtitle')}</Text>

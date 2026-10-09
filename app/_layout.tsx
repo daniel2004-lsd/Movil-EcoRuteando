@@ -6,7 +6,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider } from '../src/shared/store/ThemeContext';
 import { LanguageProvider } from '../src/shared/store/LanguageContext';
 import { AuthProvider } from '../src/shared/store/AuthContext';
+import { DialogProvider } from '../src/shared/components/ui/AppDialog';
 import { setupPushNotifications } from '../src/shared/services/pushNotificationService';
+import { ClimateWatcher } from '../src/shared/components/ClimateWatcher';
 
 export default function RootLayout() {
   useEffect(() => {
@@ -23,7 +25,12 @@ export default function RootLayout() {
       <ThemeProvider>
         <LanguageProvider>
           <AuthProvider>
-            <Stack screenOptions={{ headerShown: false }} />
+            {/* Diálogos/alertas con el estilo de la app (reemplazan a Alert.alert) */}
+            <DialogProvider>
+              {/* Alertas climáticas: vigila la ubicación y avisa al entrar a una zona */}
+              <ClimateWatcher />
+              <Stack screenOptions={{ headerShown: false }} />
+            </DialogProvider>
           </AuthProvider>
         </LanguageProvider>
       </ThemeProvider>

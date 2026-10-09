@@ -1,16 +1,7 @@
+import { Dialog } from '../../shared/components/ui/AppDialog';
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  Platform,
-  Alert,
-  ToastAndroid,
-  Image,
-} from 'react-native';
+import { 
+  View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, ToastAndroid, Image,  } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -78,10 +69,10 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
+        Dialog.alert(
           t('report.cameraPermTitle'),
           t('report.cameraPermMsg')
-        );
+        , { tone: 'warning', icon: 'camera' });
         return;
       }
       const res = await ImagePicker.launchCameraAsync({
@@ -95,7 +86,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
       }
     } catch (e) {
       console.warn('[REPORT] cámara error:', e);
-      Alert.alert(t('common.errorTitle'), t('report.cameraError'));
+      Dialog.alert(t('common.errorTitle'), t('report.cameraError'), { tone: 'error' });
     }
   };
 
@@ -103,10 +94,10 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
+        Dialog.alert(
           t('report.galleryPermTitle'),
           t('report.galleryPermMsg')
-        );
+        , { tone: 'warning', icon: 'images' });
         return;
       }
       const res = await ImagePicker.launchImageLibraryAsync({
@@ -120,14 +111,16 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
       }
     } catch (e) {
       console.warn('[REPORT] galería error:', e);
-      Alert.alert(t('common.errorTitle'), t('report.galleryError'));
+      Dialog.alert(t('common.errorTitle'), t('report.galleryError'), { tone: 'error' });
     }
   };
 
   const handleSend = async () => {
     if (sending) return;
     if (!selectedType) {
-      Alert.alert(t('report.chooseTypeTitle'), t('report.chooseTypeMsg'));
+      Dialog.alert(t('report.chooseTypeTitle'), t('report.chooseTypeMsg'), {
+      tone: 'warning',
+    });
       return;
     }
     const typeObj = OBSTACLE_TYPES.find(item => item.key === selectedType);
@@ -137,7 +130,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(t('planRoute.permissionDeniedTitle'), t('report.gpsMsg'));
+        Dialog.alert(t('planRoute.permissionDeniedTitle'), t('report.gpsMsg'), { tone: 'warning', icon: 'location' });
         return;
       }
       const pos = await Location.getCurrentPositionAsync({});
@@ -154,11 +147,11 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
       if (Platform.OS === 'android') {
         ToastAndroid.show(t('report.sentToast'), ToastAndroid.SHORT);
       } else {
-        Alert.alert(t('report.sentTitle'), t('report.sentMsg'));
+        Dialog.alert(t('report.sentTitle'), t('report.sentMsg'));
       }
       onSubmitted();
     } catch (e: any) {
-      Alert.alert(t('report.sendFailedTitle'), e?.message ?? t('planRoute.unexpectedError'));
+      Dialog.alert(t('report.sendFailedTitle'), e?.message ?? t('planRoute.unexpectedError'), { tone: 'error' });
     } finally {
       setSending(false);
     }

@@ -66,6 +66,17 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="saved-routes"
+        options={{
+          title: t('savedRoutes.title'),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="bookmark" size={size} color={color} />
+          ),
+          // Oculto en la barra: se llega desde la tarjeta «Mis rutas» del inicio.
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="report"
         options={{
           title: t('tabs.report'),
@@ -83,6 +94,17 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="bar-chart" size={size} color={color} />
           ),
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="alerts"
+        options={{
+          title: t('alerts.title'),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="warning" size={size} color={color} />
+          ),
+          // Se llega desde la tarjeta «Alertas» del inicio.
           href: null,
         }}
       />
