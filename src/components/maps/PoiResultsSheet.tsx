@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet
 import { Ionicons } from '@expo/vector-icons';
 import type { NearbyPlace, PoiCategory } from '../../services/maps/googleMaps';
 import { haversineM, formatMeters } from '../../utils/geo';
+import { useLanguage } from '../../shared/store/LanguageContext';
 
 interface Props {
   category: PoiCategory;
@@ -25,6 +26,7 @@ export function PoiResultsSheet({
   onSelectPlace,
   onRoute,
 }: Props) {
+  const { t } = useLanguage();
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -32,9 +34,9 @@ export function PoiResultsSheet({
           <Ionicons name={category.icon as any} size={16} color="#ffffff" />
         </View>
         <View style={styles.headerTexts}>
-          <Text style={styles.headerTitle}>{category.label}</Text>
+          <Text style={styles.headerTitle}>{t(`poiCats.${category.id}`)}</Text>
           <Text style={styles.headerSubtitle}>
-            {loading ? 'Buscando cerca de ti…' : `${places.length} lugares encontrados`}
+            {loading ? t('map.searching') : t('map.resultsCount').replace('{n}', String(places.length))}
           </Text>
         </View>
         <TouchableOpacity onPress={onClose} hitSlop={10} style={styles.closeBtn}>
@@ -45,12 +47,12 @@ export function PoiResultsSheet({
       {loading ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color={category.color} />
-          <Text style={styles.loadingText}>Buscando {category.label.toLowerCase()}…</Text>
+          <Text style={styles.loadingText}>{t('map.searchingFor').replace('{name}', t(`poiCats.${category.id}`).toLowerCase())}</Text>
         </View>
       ) : places.length === 0 ? (
         <View style={styles.loadingBox}>
           <Ionicons name="search-outline" size={36} color="#9aa0a6" />
-          <Text style={styles.loadingText}>No se encontraron lugares cercanos</Text>
+          <Text style={styles.loadingText}>{t('map.noResults')}</Text>
         </View>
       ) : (
         <ScrollView
@@ -88,7 +90,7 @@ export function PoiResultsSheet({
                           <>
                             <Text style={styles.dot}>·</Text>
                             <Text style={[styles.openText, !place.openNow && styles.closedText]}>
-                              {place.openNow ? 'Abierto' : 'Cerrado'}
+                              {place.openNow ? t('map.open') : t('map.closed')}
                             </Text>
                           </>
                         )}
@@ -109,7 +111,7 @@ export function PoiResultsSheet({
                   activeOpacity={0.85}
                 >
                   <Ionicons name="navigate" size={14} color="#ffffff" />
-                  <Text style={styles.routeBtnText}>Cómo llegar</Text>
+                  <Text style={styles.routeBtnText}>{t('planRoute.howToGet')}</Text>
                 </TouchableOpacity>
               </TouchableOpacity>
             );

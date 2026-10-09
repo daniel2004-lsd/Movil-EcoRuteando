@@ -1,25 +1,18 @@
 /**
- * HU-22 / CU22: etiquetas en español para los tipos de reporte.
+ * HU-22 / CU22: etiquetas para los tipos de reporte.
  * Los reportes legados guardan claves/slugs en inglés (seeds) y el
- * formulario nuevo guarda la etiqueta en español tal cual.
+ * formulario nuevo guarda la etiqueta ya traducida tal cual.
+ *
+ * Se resuelve por i18n (es/en/fr/pt): con `t` del componente si se pasa,
+ * o con `tGlobal` (idioma activo a nivel de módulo) si no.
  */
-const REPORT_TYPE_ES: Record<string, string> = {
-  traffic_light: 'Semáforo dañado',
-  signage: 'Señalización',
-  obstruction: 'Obstrucción en la vía',
-  pothole: 'Hueco',
-  sewer: 'Alcantarilla destapada',
-  hole: 'Hueco',
-  blocked: 'Vía bloqueada',
-  flood: 'Inundación',
-  works: 'Obras en la vía',
-  traffic: 'Tráfico',
-  lighting: 'Falta de iluminación',
-  other: 'Otro obstáculo',
-};
+import { tGlobal } from '../i18n/translations';
 
-/** Traduce el tipo de reporte a español; si no hay traducción, lo devuelve tal cual. */
-export function reportTypeEs(reportType: string): string {
-  if (!reportType) return 'Obstáculo';
-  return REPORT_TYPE_ES[reportType.trim()] ?? reportType;
+/** Traduce el tipo de reporte a la etiqueta localizada; si no hay clave, devuelve el valor tal cual. */
+export function reportTypeEs(reportType: string, t?: (path: string) => string): string {
+  if (!reportType) return (t ?? tGlobal)('reportTypes.default');
+  const key = reportType.trim();
+  const path = `reportTypes.${key}`;
+  const tr = (t ?? tGlobal)(path);
+  return tr !== path ? tr : key;
 }
