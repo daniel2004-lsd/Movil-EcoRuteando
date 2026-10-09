@@ -1,20 +1,9 @@
+import { Dialog } from '../../src/shared/components/ui/AppDialog';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Keyboard,
-  Platform,
-  ToastAndroid,
-  Share,
-  PanResponder,
-  Dimensions,
-} from 'react-native';
+import { 
+  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Keyboard, Platform, ToastAndroid, Share, PanResponder, Dimensions,  } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import MapView, { Marker, Polyline, UrlTile, Callout, PROVIDER_GOOGLE } from '../../src/components/maps/MapEngine';
@@ -22,6 +11,7 @@ import Constants from 'expo-constants';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
+import { useLanguage } from '../../src/shared/store/LanguageContext';
 import { TAB_BAR_HEIGHT } from '../../src/shared/theme';
 import { useAuth } from '../../src/shared/store/AuthContext';
 import { MapSearchPanel } from '../../src/components/maps/MapSearchPanel';
@@ -51,6 +41,7 @@ import {
   type NearbyPlace,
 } from '../../src/services/maps/googleMaps';
 import { saveRoute, startTrip, completeTrip, findRouteIdByName } from '../../src/services/trips';
+import apiClient from '../../src/shared/services/apiClient';
 import {
   getNearbyReports,
   voteReport,
@@ -65,13 +56,6 @@ interface PlacePoint {
   longitude: number;
   name: string;
 }
-
-const NEIVA_PLACES = [
-  { name: 'Parque Santander', lat: 2.9273, lng: -75.2819 },
-  { name: 'Terminal de Transporte', lat: 2.9150, lng: -75.285 },
-  { name: 'CC Unicentro', lat: 2.94, lng: -75.28 },
-  { name: 'Universidad Surcolombiana', lat: 2.945, lng: -75.283 },
-];
 
 const EXPLORE_PEEK = 190;
 
@@ -89,21 +73,25 @@ const ROUTE_FIT_PADDING = {
 
 export default function PlanRouteScreen() {
   const router = useRouter();
+  // Parámetros cuando se abre desde "Rutas favoritas" (origen/destino precargados).
+  const searchParams = useLocalSearchParams();
+  const favParamsRef = useRef(false);
   const { theme } = useThemeMode();
+  const { t } = useLanguage();
   const { auth } = useAuth();
   const isGuest = !!auth.guest;
   const isDark = theme === 'dark';
   const insets = useSafeAreaInsets();
 
   const requireAccount = (action: string) => {
-    Alert.alert(
-      'Necesitas una cuenta',
-      `Para ${action} inicia sesión o crea una cuenta gratis.`,
+    Dialog.alert(
+      t('planRoute.needAccountTitle'),
+      t('planRoute.needAccountMsg').replace('{action}', action),
       [
-        { text: 'Ahora no', style: 'cancel' },
-        { text: 'Iniciar sesión', onPress: () => router.push('/(auth)/login') },
+        { text: t('planRoute.notNow'), style: 'cancel' },
+        { text: t('auth.loginButton'), onPress: () => router.push('/(auth)/login') },
       ]
-    );
+    , { tone: 'info', icon: 'person-circle' });
   };
 
   const isExpoGo = Constants.executionEnvironment === 'storeClient';
@@ -153,6 +141,9 @@ export default function PlanRouteScreen() {
   const [routeStop, setRouteStop] = useState<PlacePoint | null>(null);
   const [pickingStop, setPickingStop] = useState(false);
   const [routeSaved, setRouteSaved] = useState(false);
+  // ¿La ruta calculada está en Favoritos? (ids reales de /api/favorites)
+  const [routeFav, setRouteFav] = useState(false);
+  const favIdsRef = useRef<Set<string>>(new Set());
   const [reportSheetOpen, setReportSheetOpen] = useState(false);
 
   const { region, setRegion, syncRegion, fitToCoordinates } = useMapRegion();
@@ -175,11 +166,77 @@ export default function PlanRouteScreen() {
     refreshNearbyReports();
   }, []);
 
+  // Precarga origen/destino cuando se abre desde "Rutas favoritas".
+  useEffect(() => {
+    const str = (v: string | string[] | undefined) =>
+      Array.isArray(v) ? v[0] : v;
+    const num = (v: string | string[] | undefined) => {
+      const s = str(v);
+      if (s == null) return null;
+      const n = Number(s);
+      return Number.isFinite(n) ? n : null;
+    };
+    const oLat = num(searchParams.originLat);
+    const oLng = num(searchParams.originLng);
+    const dLat = num(searchParams.destLat);
+    const dLng = num(searchParams.destLng);
+    const oName = str(searchParams.originName);
+    const dName = str(searchParams.destName);
+    const pMode = str(searchParams.mode);
+
+    const hasOrigin = oLat != null && oLng != null;
+    const hasDest = dLat != null && dLng != null;
+    if (!hasOrigin && !hasDest) return;
+    favParamsRef.current = true;
+
+    if (hasOrigin) {
+      const point: PlacePoint = {
+        latitude: oLat,
+        longitude: oLng,
+        name: oName || t('planRoute.myLocation'),
+      };
+      setOrigin(point);
+      setOriginQuery(oName || t('planRoute.myLocation'));
+    }
+    if (hasDest) {
+      const point: PlacePoint = {
+        latitude: dLat,
+        longitude: dLng,
+        name: dName || '',
+      };
+      setDestination(point);
+      setDestQuery(dName || '');
+    }
+    if (pMode === 'walking') setMode('walking');
+
+    // Centra el mapa entre origen y destino.
+    const midLat = hasOrigin && hasDest ? (oLat + dLat) / 2 : hasDest ? dLat! : oLat!;
+    const midLng = hasOrigin && hasDest ? (oLng + dLng) / 2 : hasDest ? dLng! : oLng!;
+    setRegion({ latitude: midLat, longitude: midLng, latitudeDelta: 0.08, longitudeDelta: 0.08 });
+  }, []);
+
+  // Carga los ids de favoritos del usuario para saber si la ruta actual lo es.
+  useEffect(() => {
+    if (isGuest) return;
+    let active = true;
+    (async () => {
+      try {
+        const { data } = await apiClient.get('/api/favorites');
+        const items: any[] = Array.isArray(data) ? data : (data?.items ?? []);
+        const ids = new Set<string>(
+          items.map((r: any) => r?.routeId ?? r?.id).filter(Boolean)
+        );
+        if (active) favIdsRef.current = ids;
+      } catch {}
+    })();
+    return () => { active = false; };
+  }, [isGuest]);
+
   const getCurrentLocation = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permiso denegado', 'No se pudo acceder a tu ubicación');
+        Dialog.alert(t('planRoute.permissionDeniedTitle'), t('planRoute.locationDeniedMsg'), { tone: 'warning', icon: 'location' });
         return;
       }
 
@@ -187,11 +244,13 @@ export default function PlanRouteScreen() {
       const userLocation: PlacePoint = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-        name: 'Mi ubicación',
+        name: t('planRoute.myLocation'),
       };
       setUserPos(userLocation);
+      // Si venimos de un favorito, no sobrescribas el origen/destino precargados.
+      if (favParamsRef.current) return;
       setOrigin(userLocation);
-      setOriginQuery('Mi ubicación');
+      setOriginQuery(t('planRoute.myLocation'));
       setRegion({
         latitude: userLocation.latitude,
         longitude: userLocation.longitude,
@@ -268,6 +327,7 @@ export default function PlanRouteScreen() {
     setRouteAlts([]);
     setEstimate(null);
     setRouteSavedId(null);
+    setRouteFav(false);
     setTripError(null);
     setShowBottomSheet(false);
   };
@@ -280,7 +340,7 @@ export default function PlanRouteScreen() {
   ) => {
     if (!o || !d) {
       console.log('[RUTA] calculateRoute sin origen/destino | o=', !!o, 'd=', !!d);
-      Alert.alert('Error', 'Selecciona origen y destino');
+      Dialog.alert(t('auth.errorTitle'), t('planRoute.selectOriginDest'), { tone: 'error' });
       return;
     }
 
@@ -339,7 +399,9 @@ export default function PlanRouteScreen() {
         setEstimate(null);
         setRouteSavedId(null);
         setRouteSaved(false);
+        setRouteFav(false);
         setTripError(null);
+        if (origin && destination) refreshFavoriteFlag(origin, destination);
         if (coords.length > 0) {
           // Zoom interactivo estilo Google Maps: encuadre animado de la ruta
           // con espacio para la barra superior y el panel de ruta.
@@ -360,12 +422,12 @@ export default function PlanRouteScreen() {
           selectedMode
         ).then(setEstimate);
       } else {
-        Alert.alert('Error', 'No se encontró una ruta');
+        Dialog.alert(t('auth.errorTitle'), t('planRoute.routeNotFound'), { tone: 'error' });
       }
     } catch (error) {
       console.error('Error calculating route:', error);
       console.log('[RUTA] ERROR:', JSON.stringify((error as any)?.message ?? String(error)));
-      Alert.alert('Error', 'No se pudo calcular la ruta');
+      Dialog.alert(t('auth.errorTitle'), t('planRoute.routeCalcError'), { tone: 'error' });
     } finally {
       setLoading(false);
     }
@@ -404,14 +466,19 @@ export default function PlanRouteScreen() {
     console.log('[RUTA] alternativa elegida →', chosen.duration?.text, '| otras:', rest.length - 1);
   };
 
+  // Límites de CreateRouteCommandValidator (name 150, start/destination 200).
+  const clip = (v: string, max: number) => (v.length > max ? v.slice(0, max).trim() : v);
+
   const buildSavePayload = (o: PlacePoint, d: PlacePoint) => {
     const { distanceKm, durationMin } = routeMetrics();
+    const startName = clip(o.name || t('planRoute.origin'), 200);
+    const destinationName = clip(d.name || t('planRoute.destination'), 200);
     return {
-      name: `${o.name || 'Origen'} → ${d.name || 'Destino'}`,
-      description: 'Ruta calculada desde la app móvil',
+      name: clip(`${startName} → ${destinationName}`, 150),
+      description: clip(t('planRoute.routeFromApp'), 1000),
       transportType: mode === 'driving' ? 'car' : 'walking',
-      startName: o.name || 'Origen',
-      destinationName: d.name || 'Destino',
+      startName,
+      destinationName,
       startLat: o.latitude,
       startLng: o.longitude,
       endLat: d.latitude,
@@ -424,16 +491,37 @@ export default function PlanRouteScreen() {
     };
   };
 
+  // axios solo trae "Request failed with status code 400"; el motivo real viene
+  // del backend en response.data (detail / message / errors). Sin esto, la
+  // regla CU03 (ruta duplicada por nombre) nunca se detectaba y el guardado fallaba.
+  const apiErrorMessage = (e: any): string => {
+    const d = e?.response?.data;
+    if (d) {
+      if (typeof d.detail === 'string' && d.detail) return d.detail;
+      if (typeof d.message === 'string' && d.message) return d.message;
+      if (d.errors) {
+        const first = Object.values(d.errors)
+          .flat()
+          .find((v: any) => typeof v === 'string' && v);
+        if (first) return String(first);
+      }
+    }
+    return String(e?.message ?? '');
+  };
+
   // Regla CU03: si la ruta ya existe por nombre, se reusa en vez de fallar.
-  const saveRouteSmart = async (payload: ReturnType<typeof buildSavePayload>) => {
+  const saveRouteSmart = async (
+    payload: ReturnType<typeof buildSavePayload>
+  ): Promise<{ id: string; reused: boolean }> => {
     try {
-      return await saveRoute(payload);
+      const id = await saveRoute(payload);
+      return { id, reused: false };
     } catch (saveErr: any) {
-      const msg = String(saveErr?.message ?? '');
+      const msg = apiErrorMessage(saveErr);
       if (msg.includes('Ya existe una ruta con el nombre')) {
         const rid = await findRouteIdByName(payload.name);
         console.log('[RUTA] duplicada, se reusa:', rid);
-        if (rid) return rid;
+        if (rid) return { id: rid, reused: true };
       }
       throw saveErr;
     }
@@ -441,19 +529,19 @@ export default function PlanRouteScreen() {
 
   const startTripFlow = async () => {
     console.log('[VIAJE] tap Iniciar viaje | route=', !!route, 'origin=', !!origin, 'dest=', !!destination, 'starting=', startingTrip);
-    if (isGuest) return requireAccount('iniciar y registrar viajes');
+    if (isGuest) return requireAccount(t('planRoute.actionStartTrips'));
     if (!route || !origin || !destination || startingTrip) {
       if (!origin || !destination) {
         const fallbackOrigin = route?.steps?.[0]?.startLocation;
         const fallbackDest = route?.steps?.[route.steps.length - 1]?.endLocation;
         if (fallbackOrigin?.latitude && fallbackDest?.latitude) {
-          const o = origin ?? { ...fallbackOrigin, name: originQuery || 'Origen' };
-          const d = destination ?? { ...fallbackDest, name: destQuery || 'Destino' };
+          const o = origin ?? { ...fallbackOrigin, name: originQuery || t('planRoute.origin') };
+          const d = destination ?? { ...fallbackDest, name: destQuery || t('planRoute.destination') };
           if (!origin) setOrigin(o);
           if (!destination) setDestination(d);
           return startTripFlowWith(o, d);
         }
-        setTripError('Faltan origen o destino para iniciar el viaje');
+        setTripError(t('planRoute.missingOriginDest'));
         return;
       }
       return;
@@ -470,7 +558,7 @@ export default function PlanRouteScreen() {
       if (!rid) {
         const payload = buildSavePayload(o, d);
         console.log('[VIAJE] saveRoute payload:', JSON.stringify(payload).slice(0, 400));
-        rid = await saveRouteSmart(payload);
+        rid = (await saveRouteSmart(payload)).id;
         setRouteSavedId(rid);
       }
       const started = await startTrip({
@@ -486,11 +574,11 @@ export default function PlanRouteScreen() {
       lastRecenterRef.current = null;
       preAlertRef.current.clear();
       const firstStep = route?.steps?.[0];
-      speak(`Navegación iniciada hacia ${d.name}.${firstStep?.instruction ? ' ' + firstStep.instruction : ''}`);
+      speak(t('planRoute.navStartedSpeak').replace('{name}', d.name) + (firstStep?.instruction ? ' ' + firstStep.instruction : ''));
       console.log('[VIAJE] iniciado id=', started.id, 'steps=', route?.steps?.length ?? 0);
     } catch (err: any) {
       console.log('[VIAJE] ERROR iniciar:', JSON.stringify(err?.response?.data ?? err?.message));
-      setTripError(err?.response?.data?.detail || err?.response?.data?.message || err?.message || 'Error iniciando el viaje');
+      setTripError(err?.response?.data?.detail || err?.response?.data?.message || err?.message || t('planRoute.startTripError'));
     } finally {
       setStartingTrip(false);
     }
@@ -514,16 +602,16 @@ export default function PlanRouteScreen() {
       setArrived(false);
       lastRecenterRef.current = null;
       Speech.stop();
-      Alert.alert(
-        '¡Viaje completado!',
-        'Tu trayecto quedó registrado en el historial.',
+      Dialog.alert(
+        t('planRoute.tripCompletedTitle'),
+        t('planRoute.tripCompletedMsg'),
         [
-          { text: 'Cerrar' },
-          { text: 'Ver historial', onPress: () => router.push('/(tabs)/history') },
+          { text: t('planRoute.close') },
+          { text: t('planRoute.viewHistory'), onPress: () => router.push('/(tabs)/history') },
         ]
       );
     } catch (err: any) {
-      setTripError(err?.response?.data?.message || err?.message || 'Error completando el viaje');
+      setTripError(err?.response?.data?.message || err?.message || t('planRoute.tripErrorFallback'));
     } finally {
       setCompleting(false);
     }
@@ -568,7 +656,7 @@ export default function PlanRouteScreen() {
     const p: PlacePoint = {
       latitude: coords.latitude,
       longitude: coords.longitude,
-      name: 'Mi ubicación',
+      name: t('planRoute.myLocation'),
     };
     setUserPos(p);
 
@@ -611,10 +699,10 @@ export default function PlanRouteScreen() {
       setCurrentStepIndex(steps.length);
       setRegion({ ...p, latitudeDelta: 0.005, longitudeDelta: 0.005 });
       lastRecenterRef.current = p;
-      speak('Has llegado a tu destino. Puedes completar el viaje.');
-      Alert.alert('¡Has llegado!', 'Tu trayecto llegó al destino. ¿Completar el viaje?', [
-        { text: 'Después' },
-        { text: 'Completar viaje', onPress: () => completeTripFlowRef.current() },
+      speak(t('planRoute.arrivedSpeak'));
+      Dialog.alert(t('planRoute.arrivedAlertTitle'), t('planRoute.arrivedAlertMsg'), [
+        { text: t('planRoute.later') },
+        { text: t('planRoute.completeTrip'), onPress: () => completeTripFlowRef.current() },
       ]);
       return;
     }
@@ -683,8 +771,14 @@ export default function PlanRouteScreen() {
 
   const handleExploreAction = (key: ExploreAction) => {
     if (key === 'plan') openSearch();
-    else if (key === 'favorites') router.push('/(tabs)/favorites');
-    else if (key === 'history') router.push('/(tabs)/history');
+    else if (key === 'favorites') {
+      // Modo invitado: esas pantallas son de cuenta personal.
+      if (isGuest) return requireAccount(t('tabs.favorites'));
+      router.push('/(tabs)/favorites');
+    } else if (key === 'history') {
+      if (isGuest) return requireAccount(t('tabs.history'));
+      router.push('/(tabs)/history');
+    }
   };
 
   const handleQuickPlace = (place: ExplorePlace) => {
@@ -754,7 +848,7 @@ export default function PlanRouteScreen() {
     setDestQuery(place.name);
     closePoiSheet();
     if (!origin) {
-      Alert.alert('Error', 'Selecciona el origen para calcular la ruta');
+      Dialog.alert(t('common.errorTitle'), t('planRoute.selectOrigin'), { tone: 'error' });
       openSearch();
       return;
     }
@@ -801,7 +895,7 @@ export default function PlanRouteScreen() {
   };
 
   const shareRoute = async () => {
-    if (isGuest) return requireAccount('compartir rutas');
+    if (isGuest) return requireAccount(t('planRoute.actionShare'));
     if (!route || !origin || !destination) return;
     try {
       await Share.share({
@@ -815,20 +909,76 @@ export default function PlanRouteScreen() {
     } catch {}
   };
 
-  const saveCurrentRoute = async () => {
-    if (isGuest) return requireAccount('guardar rutas');
-    if (!route || !origin || !destination || routeSaved) return;
+  // ¿La ruta recién calculada ya está en Favoritos? (la busca por nombre)
+  const refreshFavoriteFlag = async (o: PlacePoint, d: PlacePoint) => {
+    if (isGuest) return;
     try {
-      const rid = routeSavedId ?? (await saveRouteSmart(buildSavePayload(origin, destination)));
-      setRouteSavedId(rid);
-      setRouteSaved(true);
-      if (Platform.OS === 'android') {
-        ToastAndroid.show('Ruta guardada', ToastAndroid.SHORT);
+      const rid = await findRouteIdByName(buildSavePayload(o, d).name);
+      setRouteFav(!!rid && favIdsRef.current.has(rid));
+    } catch {
+      setRouteFav(false);
+    }
+  };
+
+  // Guardar en Favoritos / quitar de Favoritos (botón al lado de «Guardar»).
+  const toggleFavorite = async () => {
+    if (isGuest) return requireAccount(t('tabs.favorites'));
+    if (!route || !origin || !destination) return;
+    try {
+      let rid = routeSavedId;
+      if (!rid) {
+        const payload = buildSavePayload(origin, destination);
+        const byName = await findRouteIdByName(payload.name);
+        rid = byName ?? (await saveRouteSmart(payload)).id;
+        setRouteSavedId(rid);
+        setRouteSaved(true);
+      }
+      const wasFav = favIdsRef.current.has(rid);
+      if (wasFav) {
+        await apiClient.delete(`/api/favorites/${rid}`);
+        favIdsRef.current.delete(rid);
+        setRouteFav(false);
+        if (Platform.OS === 'android') ToastAndroid.show(t('planRoute.favoriteRemoved'), ToastAndroid.SHORT);
+        else Dialog.alert(t('planRoute.favoriteRemoved'), t('planRoute.favoriteRemovedMsg'));
       } else {
-        Alert.alert('Ruta guardada', 'La ruta quedó en tu historial de rutas.');
+        await apiClient.post('/api/favorites', { routeId: rid });
+        favIdsRef.current.add(rid);
+        setRouteFav(true);
+        if (Platform.OS === 'android') ToastAndroid.show(t('planRoute.favoriteAdded'), ToastAndroid.SHORT);
+        else Dialog.alert(t('planRoute.favoriteAdded'), t('planRoute.favoriteAddedMsg'));
       }
     } catch (e: any) {
-      Alert.alert('No se pudo guardar', e?.message ?? 'Error inesperado');
+      const msg = apiErrorMessage(e);
+      Dialog.alert(t('favorites.title'), msg || t('planRoute.unexpectedError'), { tone: 'error' });
+    }
+  };
+
+  const saveCurrentRoute = async () => {
+    if (isGuest) return requireAccount(t('planRoute.actionSave'));
+    if (!route || !origin || !destination || routeSaved) return;
+    try {
+      const payload = buildSavePayload(origin, destination);
+      console.log('[RUTA] guardar intento:', JSON.stringify({ name: payload.name, startName: payload.startName, destinationName: payload.destinationName, transportType: payload.transportType, distanceKm: payload.distanceKm, estimatedTimeMin: payload.estimatedTimeMin }));
+      let rid = routeSavedId;
+      let reused = false;
+      if (!rid) {
+        const res = await saveRouteSmart(payload);
+        rid = res.id;
+        reused = res.reused;
+      }
+      setRouteSavedId(rid);
+      setRouteSaved(true);
+      if (reused) {
+        Dialog.alert(t('planRoute.routeAlreadySaved'), t('planRoute.routeAlreadySavedMsg'), { tone: 'info' });
+      } else if (Platform.OS === 'android') {
+        ToastAndroid.show(t('planRoute.routeSaved'), ToastAndroid.SHORT);
+      } else {
+        Dialog.alert(t('planRoute.routeSaved'), t('planRoute.routeSavedMsg'));
+      }
+    } catch (e: any) {
+      const msg = apiErrorMessage(e);
+      console.log('[RUTA] guardar ERROR:', msg || e?.message);
+      Dialog.alert(t('planRoute.saveError'), msg || t('planRoute.unexpectedError'), { tone: 'error' });
     }
   };
 
@@ -850,7 +1000,7 @@ export default function PlanRouteScreen() {
   };
 
   const voteOnReport = async (report: NearbyReport, confirm: boolean) => {
-    if (isGuest) return requireAccount('votar reportes');
+    if (isGuest) return requireAccount(t('planRoute.actionVote'));
     if (votingId) return;
     let pos = userPos;
     if (!pos) {
@@ -861,14 +1011,14 @@ export default function PlanRouteScreen() {
           pos = {
             latitude: loc.coords.latitude,
             longitude: loc.coords.longitude,
-            name: 'Mi ubicación',
+            name: t('planRoute.myLocation'),
           };
           setUserPos(pos);
         }
       } catch {}
     }
     if (!pos) {
-      Alert.alert('Ubicación requerida', 'Activa tu ubicación para votar reportes cercanos.');
+      Dialog.alert(t('planRoute.locationRequiredTitle'), t('planRoute.voteLocationMsg'), { tone: 'warning', icon: 'navigate-circle' });
       return;
     }
     setVotingId(report.id);
@@ -891,16 +1041,16 @@ export default function PlanRouteScreen() {
       );
       setSelectedReport(null);
       const msg = confirm
-        ? 'Confirmaste que sigue ocurriendo'
-        : 'Marcaste que ya no ocurre';
+        ? t('planRoute.voteConfirmed')
+        : t('planRoute.voteRejected');
       if (Platform.OS === 'android') {
         ToastAndroid.show(msg, ToastAndroid.SHORT);
       } else {
-        Alert.alert('Gracias por votar', msg);
+        Dialog.alert(t('planRoute.voteThanks'), msg);
       }
       console.log('[REPORTS] voto', confirm ? '👍' : '👎', report.id, '→', result.state, result.confidenceScore);
     } catch (e: any) {
-      Alert.alert('No se pudo votar', e?.message ?? 'Error inesperado');
+      Dialog.alert(t('planRoute.voteError'), e?.message ?? t('planRoute.unexpectedError'), { tone: 'error' });
     } finally {
       setVotingId(null);
     }
@@ -920,7 +1070,11 @@ export default function PlanRouteScreen() {
     setShowDestSuggestions(false);
   };
 
-  const openProfile = () => router.push('/(tabs)/profile');
+  const openProfile = () => {
+    // Invitado: nunca abrimos el perfil; pedimos una cuenta.
+    if (isGuest) return requireAccount(t('tabs.profile'));
+    router.push('/(tabs)/profile');
+  };
 
   const fabBottom = insets.bottom + EXPLORE_PEEK + 16;
   const poiSheetOpen = showPoiSheet && !!activePoiCategory;
@@ -988,8 +1142,8 @@ export default function PlanRouteScreen() {
   const navSteps: any[] = route?.steps || [];
   const navStep = currentStepIndex < navSteps.length ? navSteps[currentStepIndex] : null;
   const navInstruction = arrived
-    ? 'Has llegado a tu destino'
-    : navStep?.instruction || 'Continúa hasta el destino';
+    ? t('planRoute.navArrived')
+    : navStep?.instruction || t('planRoute.navContinue');
   const navTarget =
     navStep?.endLocation?.latitude != null ? navStep.endLocation : destination;
   const navDistText =
@@ -1041,14 +1195,14 @@ export default function PlanRouteScreen() {
           />
         )}
         {origin && (
-          <Marker coordinate={origin} title="Origen" description={origin.name}>
+          <Marker coordinate={origin} title={t('planRoute.origin')} description={origin.name}>
             <View style={styles.originMarker}>
               <View style={styles.markerPin} />
             </View>
           </Marker>
         )}
         {destination && (
-          <Marker coordinate={destination} title="Destino" description={destination.name}>
+          <Marker coordinate={destination} title={t('planRoute.destination')} description={destination.name}>
             <View style={styles.destMarker}>
               <View style={styles.markerPinRed} />
             </View>
@@ -1089,7 +1243,7 @@ export default function PlanRouteScreen() {
                       color="#1a73e8"
                     />
                     <Text style={styles.poiCalloutAction}>
-                      {pickingStop ? 'Agregar como parada' : 'Cómo llegar'}
+                      {pickingStop ? t('planRoute.addAsStop') : t('planRoute.howToGet')}
                     </Text>
                   </View>
                 </View>
@@ -1139,10 +1293,10 @@ export default function PlanRouteScreen() {
             );
             const label =
               diffMin > 0
-                ? `${diffMin} min más lento`
+                ? t('planRoute.minSlower').replace('{n}', String(diffMin))
                 : diffMin < 0
-                ? `${-diffMin} min más rápido`
-                : 'Mismo tiempo';
+                ? t('planRoute.minFaster').replace('{n}', String(-diffMin))
+                : t('planRoute.sameTime');
             return (
               <React.Fragment key={`alt-${ai}`}>
                 <Polyline
@@ -1240,7 +1394,7 @@ export default function PlanRouteScreen() {
                   size={16}
                   color={active ? '#fff' : '#5f6368'}
                 />
-                <Text style={[styles.modeText, active && { color: '#fff' }]}>{m.label}</Text>
+                <Text style={[styles.modeText, active && { color: '#fff' }]}>{t(`modes.${m.id}`)}</Text>
               </TouchableOpacity>
             );
           })}
@@ -1309,7 +1463,7 @@ export default function PlanRouteScreen() {
             >
               <Ionicons name="chevron-up" size={18} color="#16a34a" />
               <Text style={styles.expandSheetFabText}>
-                {route?.duration?.text ? `${route.duration.text} · Ver ruta` : 'Ver ruta'}
+                {route?.duration?.text ? `${route.duration.text} · ${t('planRoute.viewRoute')}` : t('planRoute.viewRoute')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1320,13 +1474,13 @@ export default function PlanRouteScreen() {
         <TouchableOpacity
           style={[styles.reportFab, { bottom: fabBottom }]}
           onPress={() => {
-            if (isGuest) return requireAccount('reportar obstáculos');
+            if (isGuest) return requireAccount(t('planRoute.actionReport'));
             setReportSheetOpen(true);
           }}
           activeOpacity={0.85}
         >
           <Ionicons name="warning" size={18} color="#d93025" />
-          <Text style={styles.reportFabText}>Reportar</Text>
+          <Text style={styles.reportFabText}>{t('planRoute.report')}</Text>
         </TouchableOpacity>
       )}
 
@@ -1428,6 +1582,7 @@ export default function PlanRouteScreen() {
               setTripError(null);
               setRouteStop(null);
               setRouteSaved(false);
+              setRouteFav(false);
               setPickingStop(false);
             }}
             onSelectRoute={handleSelectRoute}
@@ -1436,8 +1591,10 @@ export default function PlanRouteScreen() {
             onAddStop={startPickStop}
             onShare={shareRoute}
             onSave={saveCurrentRoute}
+            onToggleFavorite={toggleFavorite}
+            routeFavorited={routeFav}
             onReport={() => {
-              if (isGuest) return requireAccount('reportar obstáculos');
+              if (isGuest) return requireAccount(t('planRoute.actionReport'));
               setReportSheetOpen(true);
             }}
             routeSaved={routeSaved}
@@ -1486,7 +1643,7 @@ export default function PlanRouteScreen() {
               onModePress={id => changeMode(id as TransportMode)}
               onAction={handleExploreAction}
               onPlaceSelect={handleQuickPlace}
-              places={NEIVA_PLACES}
+              places={poiPlaces.map(p => ({ name: p.name, lat: p.latitude, lng: p.longitude }))}
             />
           </BottomSheet>
         )

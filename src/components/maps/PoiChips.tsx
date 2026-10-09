@@ -2,6 +2,7 @@ import React from 'react';
 import { ScrollView, TouchableOpacity, Text, View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { POI_CATEGORIES, type PoiCategory } from '../../services/maps/googleMaps';
+import { useLanguage } from '../../shared/store/LanguageContext';
 
 interface Props {
   active: string | null;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function PoiChips({ active, onSelect }: Props) {
+  const { t } = useLanguage();
   return (
     <View style={styles.wrap}>
       <ScrollView
@@ -30,7 +32,7 @@ export function PoiChips({ active, onSelect }: Props) {
                 size={15}
                 color={on ? '#ffffff' : '#5f6368'}
               />
-              <Text style={[styles.label, on && styles.labelOn]}>{category.label}</Text>
+              <Text style={[styles.label, on && styles.labelOn]}>{t(`poiCats.${category.id}`)}</Text>
             </TouchableOpacity>
           );
         })}
