@@ -2,7 +2,10 @@
   "expo": {
     "name": "EcoRuteando",
     "slug": "ecoruteando-mobile",
-    "scheme": "ecoruteando",
+    "scheme": [
+      "ecoruteando",
+      "com.ecoruteando.mobile"
+    ],
     "version": "1.0.0",
     "orientation": "portrait",
     "platforms": [

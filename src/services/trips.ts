@@ -29,7 +29,13 @@ export async function saveRoute(payload: SaveRoutePayload): Promise<string> {
 export async function findRouteIdByName(name: string): Promise<string | null> {
   const { data } = await apiClient.get('/api/routes');
   const list = Array.isArray(data) ? data : [];
-  const hit = list.find((r: { id?: string; name?: string }) => r?.name === name);
+  // El backend valida el duplicado con trim + minúsculas (ExistsByNameAsync);
+  // aquí hay que comparar igual para poder reencontrar la ruta y reusarla.
+  const normalized = name.trim().toLowerCase();
+  const hit = list.find(
+    (r: { id?: string; name?: string }) =>
+      (r?.name ?? '').trim().toLowerCase() === normalized
+  );
   return hit?.id ?? null;
 }
 

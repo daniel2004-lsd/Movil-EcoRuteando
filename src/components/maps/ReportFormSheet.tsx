@@ -1,16 +1,7 @@
+import { Dialog } from '../../shared/components/ui/AppDialog';
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  Platform,
-  Alert,
-  ToastAndroid,
-  Image,
-} from 'react-native';
+import { 
+  View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, ToastAndroid, Image,  } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -50,7 +41,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
-          setLocation('Mi ubicación');
+          setLocation(t('planRoute.myLocation'));
           return;
         }
         const pos = await Location.getCurrentPositionAsync({});
@@ -64,12 +55,12 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
             place.district,
             place.city,
           ].filter(Boolean);
-          setLocation(parts.length ? parts.join(', ') : 'Mi ubicación');
+          setLocation(parts.length ? parts.join(', ') : t('planRoute.myLocation'));
         } else {
-          setLocation('Mi ubicación');
+          setLocation(t('planRoute.myLocation'));
         }
       } catch {
-        setLocation('Mi ubicación');
+        setLocation(t('planRoute.myLocation'));
       }
     })();
   }, []);
@@ -78,10 +69,10 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Permiso de cámara',
-          'Permite el acceso a la cámara para fotografiar el obstáculo.'
-        );
+        Dialog.alert(
+          t('report.cameraPermTitle'),
+          t('report.cameraPermMsg')
+        , { tone: 'warning', icon: 'camera' });
         return;
       }
       const res = await ImagePicker.launchCameraAsync({
@@ -95,7 +86,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
       }
     } catch (e) {
       console.warn('[REPORT] cámara error:', e);
-      Alert.alert('Error', 'No se pudo abrir la cámara.');
+      Dialog.alert(t('common.errorTitle'), t('report.cameraError'), { tone: 'error' });
     }
   };
 
@@ -103,10 +94,10 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Permiso de galería',
-          'Permite el acceso a tus fotos para adjuntar una imagen.'
-        );
+        Dialog.alert(
+          t('report.galleryPermTitle'),
+          t('report.galleryPermMsg')
+        , { tone: 'warning', icon: 'images' });
         return;
       }
       const res = await ImagePicker.launchImageLibraryAsync({
@@ -120,14 +111,16 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
       }
     } catch (e) {
       console.warn('[REPORT] galería error:', e);
-      Alert.alert('Error', 'No se pudo abrir la galería.');
+      Dialog.alert(t('common.errorTitle'), t('report.galleryError'), { tone: 'error' });
     }
   };
 
   const handleSend = async () => {
     if (sending) return;
     if (!selectedType) {
-      Alert.alert('Elige un tipo', 'Selecciona qué obstáculo estás reportando.');
+      Dialog.alert(t('report.chooseTypeTitle'), t('report.chooseTypeMsg'), {
+      tone: 'warning',
+    });
       return;
     }
     const typeObj = OBSTACLE_TYPES.find(item => item.key === selectedType);
@@ -137,7 +130,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permiso denegado', 'Se necesita tu ubicación GPS para enviar el reporte.');
+        Dialog.alert(t('planRoute.permissionDeniedTitle'), t('report.gpsMsg'), { tone: 'warning', icon: 'location' });
         return;
       }
       const pos = await Location.getCurrentPositionAsync({});
@@ -147,18 +140,18 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
         description: details.trim() || typeObj.label,
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
-        addressText: (location.trim() || 'Mi ubicación').slice(0, 300),
+        addressText: (location.trim() || t('planRoute.myLocation')).slice(0, 300),
         photoUrl: photoUri,
       });
 
       if (Platform.OS === 'android') {
-        ToastAndroid.show('Reporte enviado. ¡Gracias!', ToastAndroid.SHORT);
+        ToastAndroid.show(t('report.sentToast'), ToastAndroid.SHORT);
       } else {
-        Alert.alert('Reporte enviado', 'Gracias. El reporte ya está en el mapa.');
+        Dialog.alert(t('report.sentTitle'), t('report.sentMsg'));
       }
       onSubmitted();
     } catch (e: any) {
-      Alert.alert('No se pudo enviar', e?.message ?? 'Error inesperado');
+      Dialog.alert(t('report.sendFailedTitle'), e?.message ?? t('planRoute.unexpectedError'), { tone: 'error' });
     } finally {
       setSending(false);
     }
@@ -167,12 +160,12 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Reportar obstáculo</Text>
+        <Text style={styles.title}>{t('report.formTitle')}</Text>
         <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Ionicons name="close" size={22} color="#5f6368" />
         </TouchableOpacity>
       </View>
-      <Text style={styles.subtitle}>¿Qué estás encontrando en tu ruta?</Text>
+      <Text style={styles.subtitle}>{t('report.formSubtitle')}</Text>
 
       <ScrollView
         style={styles.scroll}
@@ -210,7 +203,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
             style={styles.fieldInput}
             value={location}
             onChangeText={setLocation}
-            placeholder="Ubicación aproximada"
+            placeholder={t('report.locationTitle')}
             placeholderTextColor="#9aa0a6"
             returnKeyType="done"
           />
@@ -220,7 +213,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
         {photoUri ? (
           <View style={styles.photoRow}>
             <Image source={{ uri: photoUri }} style={styles.photoThumb} />
-            <Text style={[styles.photoText, { flex: 1 }]}>Foto adjunta</Text>
+            <Text style={[styles.photoText, { flex: 1 }]}>{t('report.photoAttached')}</Text>
             <TouchableOpacity
               onPress={() => setPhotoUri(null)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -232,11 +225,11 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
           <View style={styles.photoRow}>
             <Ionicons name="camera-outline" size={18} color="#16a34a" />
             <TouchableOpacity style={styles.photoBtn} onPress={handlePickPhoto} activeOpacity={0.7}>
-              <Text style={styles.photoText}>Tomar foto</Text>
+              <Text style={styles.photoText}>{t('report.cameraBtn')}</Text>
             </TouchableOpacity>
             <View style={styles.photoDivider} />
             <TouchableOpacity style={styles.photoBtn} onPress={handlePickGallery} activeOpacity={0.7}>
-              <Text style={styles.photoText}>Galería</Text>
+              <Text style={styles.photoText}>{t('report.galleryBtn')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -246,7 +239,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
           style={styles.detailsInput}
           value={details}
           onChangeText={setDetails}
-          placeholder="Detalles adicionales (opcional)"
+          placeholder={t('report.detailsPlaceholderOpt')}
           placeholderTextColor="#9aa0a6"
           multiline
           maxLength={500}
@@ -259,7 +252,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
         disabled={sending}
         activeOpacity={0.85}
       >
-        <Text style={styles.sendBtnText}>{sending ? 'Enviando…' : 'Enviar reporte'}</Text>
+        <Text style={styles.sendBtnText}>{sending ? t('report.sending') : t('report.send')}</Text>
         <Ionicons name="send" size={18} color="#ffffff" />
       </TouchableOpacity>
     </View>

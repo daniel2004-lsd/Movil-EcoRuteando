@@ -9,6 +9,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TRANSPORT_MODES } from '../../services/maps/googleMaps';
+import { useLanguage } from '../../shared/store/LanguageContext';
 
 export interface ExplorePlace {
   name: string;
@@ -26,10 +27,9 @@ interface ExploreSheetProps {
   places: ExplorePlace[];
 }
 
-const ACTIONS: { key: ExploreAction; label: string; icon: string }[] = [
-  { key: 'plan', label: 'Planificar ruta', icon: 'navigate-outline' },
-  { key: 'favorites', label: 'Favoritos', icon: 'heart-outline' },
-  { key: 'history', label: 'Historial', icon: 'time-outline' },
+const ACTIONS: { key: ExploreAction; labelKey: string; icon: string }[] = [
+  { key: 'plan', labelKey: 'home.modPlan', icon: 'navigate-outline' },
+  { key: 'history', labelKey: 'tabs.history', icon: 'time-outline' },
 ];
 
 export function ExploreSheet({
@@ -39,6 +39,7 @@ export function ExploreSheet({
   onPlaceSelect,
   places,
 }: ExploreSheetProps) {
+  const { t } = useLanguage();
   const insets = useSafeAreaInsets();
 
   return (
@@ -49,7 +50,7 @@ export function ExploreSheet({
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.grabber} />
-      <Text style={styles.title}>Explora EcoRuteando</Text>
+      <Text style={styles.title}>{t('map.explore')}</Text>
 
       <ScrollView
         horizontal
@@ -70,7 +71,7 @@ export function ExploreSheet({
                 size={16}
                 color={active ? '#fff' : '#5f6368'}
               />
-              <Text style={[styles.modeLabel, active && { color: '#fff' }]}>{m.label}</Text>
+              <Text style={[styles.modeLabel, active && { color: '#fff' }]}>{t(`modes.${m.id}`)}</Text>
             </TouchableOpacity>
           );
         })}
@@ -88,13 +89,13 @@ export function ExploreSheet({
               <Ionicons name={a.icon as any} size={22} color="#57a83a" />
             </View>
             <Text style={styles.actionLabel} numberOfLines={2}>
-              {a.label}
+              {t(a.labelKey)}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      <Text style={styles.sectionTitle}>Destinos populares</Text>
+      <Text style={styles.sectionTitle}>{t('map.popular')}</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
