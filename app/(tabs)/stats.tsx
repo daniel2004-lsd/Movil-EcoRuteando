@@ -1,5 +1,5 @@
-// app/(tabs)/stats.tsx
-import React, { useEffect, useState, useCallback } from 'react';
+// app/(tabs)/stats.tsx — estilo dashboard (mismo look que Inicio / Historial / Favoritos)
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,22 +7,15 @@ import {
   ScrollView,
   Dimensions,
   TouchableOpacity,
-  Platform,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import {
-  LineChart,
-  BarChart,
-  ProgressChart,
-} from 'react-native-chart-kit';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { LineChart, BarChart, ProgressChart } from 'react-native-chart-kit';
+import { useRouter, useFocusEffect } from 'expo-router';
 
-import { spacing } from '../../src/shared/theme';
 import apiClient from '../../src/shared/services/apiClient';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
+import { useAuth } from '../../src/shared/store/AuthContext';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -32,620 +25,406 @@ export default function StatsScreen() {
   const { t } = useLanguage();
   const isDark = theme === 'dark';
 
-  const insets = useSafeAreaInsets();
-
   const chartWidth = Math.min(screenWidth - 32, 900 - 32);
 
-  const [liveStats, setLiveStats] = useState<any>(null);
-  const fetchStats = useCallback(async () => {
-    try {
-      const { data } = await apiClient.get('/api/admin/stats');
-      setLiveStats(data);
-    } catch {}
-    try {
-      const { data } = await apiClient.get('/api/exports/trips', { params: { format: 'json' } });
-      if (data?.items && !liveStats) setLiveStats((s:any) => s || { trips: data.items });
-    } catch {}
-  }, []);
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  const { auth } = useAuth();
+  const isGuest = !!auth.guest;
 
-  // 1) Línea: CO₂ por mes
+  // Viajes reales del usuario (GET /api/trips).
+  const [trips, setTrips] = useState<any[]>([]);
+  const fetchStats = useCallback(async () => {
+    if (isGuest) return;
+    try {
+      const { data } = await apiClient.get('/api/trips');
+      const items: any[] = Array.isArray(data) ? data : (data?.items ?? []);
+      setTrips(items.filter(x => x && (x.usageId || x.id)));
+    } catch (e: any) {
+      console.warn('[stats] error:', e?.message, e?.response?.status);
+    }
+  }, [isGuest]);
+
+  // Recarga cada vez que entras a la pantalla.
+  useFocusEffect(
+    useCallback(() => {
+      fetchStats();
+    }, [fetchStats])
+  );
+
+  // Helpers sobre los viajes reales
+  const modeOf = (x: any) => String(x?.transportMode ?? '').toLowerCase();
+  const kmOf = (x: any) => Number(x?.actualDistanceKm ?? 0) || 0;
+  const minOf = (x: any) => Number(x?.actualDurationMin ?? 0) || 0;
+  const co2Of = (x: any) => Number(x?.actualCo2Kg ?? 0) || 0;
+  const hasTrips = trips.length > 0;
+
+  const walkList = trips.filter(x => modeOf(x) === 'walking' || modeOf(x) === 'walk');
+  const bikeList = trips.filter(x => modeOf(x) === 'bike' || modeOf(x) === 'bicycle');
+  const carList = trips.filter(x => modeOf(x) === 'car' || modeOf(x) === 'driving' || modeOf(x) === 'taxi');
+
+  const taxiKm = carList.reduce((a, x) => a + kmOf(x), 0);
+  const totalMin = trips.reduce((a, x) => a + minOf(x), 0);
+  const modeLabels = [t('stats.modeWalk'), t('savedRoutes.transport.bike'), t('stats.modeCar')];
+
+  // 1) Línea: CO₂ de los últimos 6 meses (datos del usuario)
+  const MONTH_KEYS = ['stats.jan','stats.feb','stats.mar','stats.apr','stats.may','stats.jun',
+                      'stats.jul','stats.aug','stats.sep','stats.oct','stats.nov','stats.dec'];
+  const now = new Date();
+  const lastMonths = Array.from({ length: 6 }, (_, i) => new Date(now.getFullYear(), now.getMonth() - (5 - i), 1));
+  const monthCo2 = lastMonths.map(d =>
+    trips
+      .filter(x => { const s = new Date(x?.startedAt ?? 0); return s.getFullYear() === d.getFullYear() && s.getMonth() === d.getMonth(); })
+      .reduce((a, x) => a + co2Of(x), 0)
+  );
+  const thisMonthCo2 = monthCo2[monthCo2.length - 1] || 0;
+
   const co2Data = {
-    labels: [t('stats.jan'), t('stats.feb'), t('stats.mar'), t('stats.apr'), t('stats.may'), t('stats.jun')],
+    labels: lastMonths.map(d => t(MONTH_KEYS[d.getMonth()])),
     datasets: [
       {
-        data: [3.2, 4.1, 5.0, 4.6, 6.2, 5.8],
-        color: (opacity = 1) => `rgba(22, 163, 74, ${opacity})`,
+        data: monthCo2.map(v => Number(v.toFixed(2))),
+        color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
         strokeWidth: 2,
       },
     ],
   };
 
-  // 2) Barra vertical: número de trayectos
+  // 2) Barra vertical: trayectos por modo
   const tripsData = {
-    labels: [t('stats.modeWalk'), t('planRoute.taxi')],
-    datasets: [{ data: [7, 5] }],
+    labels: modeLabels,
+    datasets: [{ data: [walkList.length, bikeList.length, carList.length] }],
   };
 
   // 3) Anillo de progreso: tiempo relativo por modo
+  const modeMin = [walkList, bikeList, carList].map(list => list.reduce((a, x) => a + minOf(x), 0));
+  const sumMin = modeMin.reduce((a, b) => a + b, 0);
   const timeProgressData = {
-    labels: [t('stats.modeWalk'), t('planRoute.taxi')],
-    data: [0.61, 0.39],
+    labels: modeLabels,
+    data: sumMin > 0 ? modeMin.map(m => m / sumMin) : [0, 0, 0],
   };
 
   // 4) Anillos eco vs carro (proporción de CO₂)
+  const ecoCo2 = [...walkList, ...bikeList].reduce((a, x) => a + co2Of(x), 0);
+  const carCo2 = carList.reduce((a, x) => a + co2Of(x), 0);
+  const sumCo2 = ecoCo2 + carCo2;
   const co2CompareProgressData = {
     labels: [t('stats.routeEco'), t('stats.modeCar')],
-    data: [0.21, 0.79], // 0.9 frente a 3.4 aprox
+    data: sumCo2 > 0 ? [ecoCo2 / sumCo2, carCo2 / sumCo2] : [0, 0],
   };
 
   const baseChartConfig = {
-    backgroundColor: '#0f172a',
-    backgroundGradientFrom: isDark ? '#020617' : '#f9fafb',
-    backgroundGradientTo: isDark ? '#020617' : '#f9fafb',
+    backgroundColor: '#ffffff',
+    backgroundGradientFrom: isDark ? '#1f2937' : '#ffffff',
+    backgroundGradientTo: isDark ? '#1f2937' : '#ffffff',
     decimalPlaces: 1,
-    color: (opacity = 1) => `rgba(15, 118, 110, ${opacity})`,
+    color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
     labelColor: (opacity = 1) =>
-      isDark
-        ? `rgba(226,232,240,${opacity})`
-        : `rgba(71,85,105,${opacity})`,
+      isDark ? `rgba(226,232,240,${opacity})` : `rgba(107,114,128,${opacity})`,
     propsForBackgroundLines: {
-      stroke: isDark
-        ? 'rgba(51,65,85,0.6)'
-        : 'rgba(203,213,225,0.7)',
+      stroke: isDark ? 'rgba(51,65,85,0.6)' : 'rgba(209,213,219,0.7)',
       strokeDasharray: '4 6',
     },
   };
 
   const lineChartConfig = {
     ...baseChartConfig,
-    propsForDots: {
-      r: '3',
-      strokeWidth: '2',
-      stroke: '#16a34a',
-    },
+    propsForDots: { r: '3', strokeWidth: '2', stroke: '#10b981' },
   };
 
-  const barChartConfig = {
-    ...baseChartConfig,
-    barPercentage: 0.6,
-  };
-
-  const progressChartConfig = {
-    ...baseChartConfig,
-    decimalPlaces: 0,
-  };
+  const barChartConfig = { ...baseChartConfig, barPercentage: 0.6 };
+  const progressChartConfig = { ...baseChartConfig, decimalPlaces: 0 };
 
   return (
-    <LinearGradient
-      colors={
-        isDark
-          ? ['#022c22', '#064e3b', '#14532d']
-          : ['#1a3d2b', '#2c5f3f', '#4a8f65']
-      }
-      style={s.bg}
-      start={{ x: 0.1, y: 0 }}
-      end={{ x: 0.9, y: 1 }}
-    >
-      <SafeAreaView
-        style={[
-          s.safeArea,
-          {
-            paddingTop: insets.top,
-          },
-        ]}
-      >
-        <View style={s.circle1} />
-        <View style={s.circle2} />
-        <View style={s.circle3} />
+    <View style={[s.page, isDark && s.pageDark]}>
+      {/* Cabecera — igual que el dashboard */}
+      <View style={[s.header, isDark && s.headerDark]}>
+        <View style={s.headerLeft}>
+          <TouchableOpacity
+            style={[s.pillBtn, isDark && { backgroundColor: '#162329', borderColor: '#26383D' }]}
+            onPress={() => router.back()}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="arrow-back" size={16} color={isDark ? '#e2e8f0' : '#4b5563'} />
+          </TouchableOpacity>
+          <View style={s.logoBox}>
+            <Ionicons name="leaf" size={20} color="#fff" />
+          </View>
+          <Text style={[s.headerTitle, isDark && { color: '#e2e8f0' }]} numberOfLines={1}>
+            {t('stats.title')}
+          </Text>
+        </View>
 
-        <ScrollView
-          contentContainerStyle={s.scroll}
-          showsVerticalScrollIndicator={false}
+        <TouchableOpacity
+          style={[s.pillBtn, isDark && { backgroundColor: '#162329', borderColor: '#26383D' }]}
+          onPress={() => router.replace('/(tabs)')}
         >
-          <View style={s.wrapper}>
-            {/* Header con botón de volver */}
-            <View style={[s.headerRow, { marginTop: -4 }]}>
-              <View style={s.headerLeft}>
-                <TouchableOpacity
-                  style={s.backBtn}
-                  onPress={() => router.back()}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons
-                    name="arrow-back"
-                    size={18}
-                    color="#bbf7d0"
-                  />
-                  <Text style={s.backText}>{t('common.back')}</Text>
-                </TouchableOpacity>
+          <Ionicons name="home-outline" size={16} color={isDark ? '#e2e8f0' : '#4b5563'} />
+        </TouchableOpacity>
+      </View>
 
-                <View style={s.headerTextBlock}>
-                  <Text style={s.title}>
-                    {t('stats.title')}
-                  </Text>
-                  <Text style={s.subtitle}>
-                    {t('stats.subtitle')}
-                  </Text>
-                </View>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        {/* Resumen rápido */}
+        <View style={[s.card, isDark && s.cardDark]}>
+          <Text style={[s.cardTitle, isDark && { color: '#e2e8f0' }]}>{t('stats.subtitle')}</Text>
+
+          <View style={s.statsGrid}>
+            <View style={[s.statCard, isDark && s.statCardDark]}>
+              <View style={[s.statIcon, { backgroundColor: 'rgba(16,185,129,0.15)' }]}>
+                <Ionicons name="leaf" size={20} color="#10b981" />
               </View>
-
-              <View style={s.exportIconRow}>
-                <TouchableOpacity
-                  style={s.exportIconBtn}
-                  onPress={async () => {
-                    try { const { data } = await apiClient.get('/api/exports/trips', { params: { format: 'pdf' }, responseType: 'blob' }); } catch {}
-                  }}
-                >
-                  <Ionicons
-                    name="document-text-outline"
-                    size={18}
-                    color="#022c22"
-                  />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={s.exportIconBtn}
-                  onPress={async () => {
-                    try { const { data } = await apiClient.get('/api/exports/trips', { params: { format: 'xlsx' }, responseType: 'blob' }); } catch {}
-                  }}
-                >
-                  <Ionicons
-                    name="grid-outline"
-                    size={18}
-                    color="#022c22"
-                  />
-                </TouchableOpacity>
-              </View>
+              <Text style={[s.statValue, isDark && { color: '#e2e8f0' }]}>
+                {hasTrips ? `${thisMonthCo2.toFixed(1)} kg` : '—'}
+              </Text>
+              <Text style={[s.statLabel, isDark && { color: '#94a3b8' }]}>{t('stats.co2ThisMonth')}</Text>
             </View>
 
-            {/* Resumen rápido */}
-            <View style={s.summaryRow}>
-              <View style={s.summaryCard}>
-                <Ionicons
-                  name="leaf-outline"
-                  size={20}
-                  color="#16a34a"
-                />
-                <View style={s.summaryTextBlock}>
-                  <Text style={s.summaryLabel}>
-                    {t('stats.co2ThisMonth')}
-                  </Text>
-                  <Text style={s.summaryValue}>{liveStats?.co2SavedKg ? `${Number(liveStats.co2SavedKg).toFixed(1)} kg` : '6.2 kg'}</Text>
-                </View>
+            <View style={[s.statCard, isDark && s.statCardDark]}>
+              <View style={[s.statIcon, { backgroundColor: 'rgba(59,130,246,0.15)' }]}>
+                <Ionicons name="walk-outline" size={20} color="#3b82f6" />
               </View>
-
-              <View style={s.summaryCard}>
-                <Ionicons
-                  name="walk-outline"
-                  size={20}
-                  color="#2563eb"
-                />
-                <View style={s.summaryTextBlock}>
-                  <Text style={s.summaryLabel}>
-                    {t('stats.ecoTrips')}
-                  </Text>
-                  <Text style={s.summaryValue}>{liveStats?.totalTrips ?? 24}</Text>
-                </View>
-              </View>
+              <Text style={[s.statValue, isDark && { color: '#e2e8f0' }]}>
+                {hasTrips ? trips.length : '—'}
+              </Text>
+              <Text style={[s.statLabel, isDark && { color: '#94a3b8' }]}>{t('stats.ecoTrips')}</Text>
             </View>
+          </View>
+        </View>
 
-            {/* 1. Línea: CO₂ en el tiempo */}
-            <View
-              style={[
-                s.chartCard,
-                isDark && s.chartCardDark,
-              ]}
-            >
-              <Text
-                style={[
-                  s.sectionTitle,
-                  isDark && s.sectionTitleDark,
-                ]}
-              >
-                {t('stats.co2PerMonth')}
-              </Text>
-              <Text
-                style={[
-                  s.sectionHelp,
-                  isDark && s.sectionHelpDark,
-                ]}
-              >
-                {t('stats.co2PerMonthDesc')}
-              </Text>
+        {/* 1. Línea: CO₂ en el tiempo */}
+        <View style={[s.chartCard, isDark && s.chartCardDark]}>
+          <Text style={[s.sectionTitle, isDark && s.sectionTitleDark]}>{t('stats.co2PerMonth')}</Text>
+          <Text style={[s.sectionHelp, isDark && s.sectionHelpDark]}>{t('stats.co2PerMonthDesc')}</Text>
+          <View style={s.chartWrapper}>
+            <LineChart
+              data={co2Data}
+              width={chartWidth - 32}
+              height={220}
+              chartConfig={lineChartConfig}
+              bezier
+              style={s.chart}
+            />
+          </View>
+        </View>
 
-              <View style={s.chartWrapper}>
-                <LineChart
-                  data={co2Data}
-                  width={chartWidth}
-                  height={220}
-                  chartConfig={lineChartConfig}
-                  bezier
-                  style={s.chart}
-                />
-              </View>
+        {/* 2. Barra vertical: distribución de trayectos */}
+        <View style={[s.chartCard, isDark && s.chartCardDark]}>
+          <Text style={[s.sectionTitle, isDark && s.sectionTitleDark]}>{t('stats.modeDistribution')}</Text>
+          <Text style={[s.sectionHelp, isDark && s.sectionHelpDark]}>{t('stats.modeDistributionDesc')}</Text>
+          <View style={s.chartWrapper}>
+            <BarChart
+              data={tripsData}
+              width={chartWidth - 32}
+              height={220}
+              chartConfig={barChartConfig}
+              yAxisLabel=""
+              yAxisSuffix=""
+              fromZero
+              showValuesOnTopOfBars
+              style={s.chart}
+            />
+          </View>
+        </View>
+
+        {/* 3. ProgressChart: tiempo relativo por modo */}
+        <View style={[s.chartCard, isDark && s.chartCardDark]}>
+          <Text style={[s.sectionTitle, isDark && s.sectionTitleDark]}>{t('stats.timePerMode')}</Text>
+          <Text style={[s.sectionHelp, isDark && s.sectionHelpDark]}>{t('stats.timePerModeDesc')}</Text>
+          <View style={s.chartWrapperCenter}>
+            <ProgressChart
+              data={timeProgressData}
+              width={chartWidth > 380 ? 320 : chartWidth - 48}
+              height={220}
+              strokeWidth={10}
+              radius={40}
+              chartConfig={progressChartConfig}
+              hideLegend={false}
+              style={s.chart}
+            />
+          </View>
+        </View>
+
+        {/* 4. ProgressChart: eco vs carro */}
+        <View style={[s.chartCard, isDark && s.chartCardDark]}>
+          <Text style={[s.sectionTitle, isDark && s.sectionTitleDark]}>{t('stats.co2PerTrip')}</Text>
+          <Text style={[s.sectionHelp, isDark && s.sectionHelpDark]}>{t('stats.co2PerTripDesc')}</Text>
+          <View style={s.chartWrapperCenter}>
+            <ProgressChart
+              data={co2CompareProgressData}
+              width={chartWidth > 380 ? 260 : chartWidth - 48}
+              height={200}
+              strokeWidth={12}
+              radius={32}
+              chartConfig={{
+                ...progressChartConfig,
+                color: (opacity = 1) => `rgba(16,185,129,${opacity})`,
+              }}
+              hideLegend={false}
+              style={s.chart}
+            />
+          </View>
+        </View>
+
+        {/* Detalle numérico */}
+        <View style={[s.detailCard, isDark && s.detailCardDark]}>
+          <Text style={[s.sectionTitle, isDark && s.sectionTitleDark]}>{t('stats.detailedSummary')}</Text>
+
+          <View style={s.detailRow}>
+            <View style={[s.detailIcon, { backgroundColor: 'rgba(249,115,22,0.15)' }]}>
+              <Ionicons name="car-outline" size={18} color="#f97316" />
             </View>
-
-            {/* 2. Barra vertical: distribución de trayectos */}
-            <View
-              style={[
-                s.chartCard,
-                isDark && s.chartCardDark,
-              ]}
-            >
-              <Text
-                style={[
-                  s.sectionTitle,
-                  isDark && s.sectionTitleDark,
-                ]}
-              >
-                {t('stats.modeDistribution')}
-              </Text>
-              <Text
-                style={[
-                  s.sectionHelp,
-                  isDark && s.sectionHelpDark,
-                ]}
-              >
-                {t('stats.modeDistributionDesc')}
-              </Text>
-
-              <View style={s.chartWrapper}>
-                <BarChart
-                  data={tripsData}
-                  width={chartWidth}
-                  height={220}
-                  chartConfig={barChartConfig}
-                  yAxisLabel=""
-                  yAxisSuffix=""
-                  fromZero
-                  showValuesOnTopOfBars
-                  style={s.chart}
-                />
-              </View>
-            </View>
-
-            {/* 3. ProgressChart: tiempo relativo por modo */}
-            <View
-              style={[
-                s.chartCard,
-                isDark && s.chartCardDark,
-              ]}
-            >
-              <Text
-                style={[
-                  s.sectionTitle,
-                  isDark && s.sectionTitleDark,
-                ]}
-              >
-                {t('stats.timePerMode')}
-              </Text>
-              <Text
-                style={[
-                  s.sectionHelp,
-                  isDark && s.sectionHelpDark,
-                ]}
-              >
-                {t('stats.timePerModeDesc')}
-              </Text>
-
-              <View style={s.chartWrapperCenter}>
-                <ProgressChart
-                  data={timeProgressData}
-                  width={chartWidth > 380 ? 320 : chartWidth - 16}
-                  height={220}
-                  strokeWidth={10}
-                  radius={40}
-                  chartConfig={progressChartConfig}
-                  hideLegend={false}
-                  style={s.chart}
-                />
-              </View>
-            </View>
-
-            {/* 4. ProgressChart: eco vs carro */}
-            <View
-              style={[
-                s.chartCard,
-                isDark && s.chartCardDark,
-              ]}
-            >
-              <Text
-                style={[
-                  s.sectionTitle,
-                  isDark && s.sectionTitleDark,
-                ]}
-              >
-                {t('stats.co2PerTrip')}
-              </Text>
-              <Text
-                style={[
-                  s.sectionHelp,
-                  isDark && s.sectionHelpDark,
-                ]}
-              >
-                {t('stats.co2PerTripDesc')}
-              </Text>
-
-              <View style={s.chartWrapperCenter}>
-                <ProgressChart
-                  data={co2CompareProgressData}
-                  width={chartWidth > 380 ? 260 : chartWidth - 32}
-                  height={200}
-                  strokeWidth={12}
-                  radius={32}
-                  chartConfig={{
-                    ...progressChartConfig,
-                    color: (opacity = 1) =>
-                      `rgba(22,163,74,${opacity})`,
-                    labelColor: (opacity = 1) =>
-                      isDark
-                        ? `rgba(226,232,240,${opacity})`
-                        : `rgba(30,64,175,${opacity})`,
-                  }}
-                  hideLegend={false}
-                  style={s.chart}
-                />
-              </View>
-            </View>
-
-            {/* Detalle numérico */}
-            <View
-              style={[
-                s.detailCard,
-                isDark && s.detailCardDark,
-              ]}
-            >
-              <Text
-                style={[
-                  s.sectionTitle,
-                  isDark && s.sectionTitleDark,
-                ]}
-              >
-                {t('stats.detailedSummary')}
-              </Text>
-
-              <View style={s.detailRow}>
-                <Ionicons
-                  name="car-outline"
-                  size={18}
-                  color="#f97316"
-                />
-                <View style={s.detailTextBlock}>
-                  <Text style={s.detailLabel}>
-                    {t('stats.taxiKm')}
-                  </Text>
-                  <Text style={s.detailValue}>15.4 km</Text>
-                </View>
-              </View>
-
-              <View style={s.detailRow}>
-                <Ionicons
-                  name="time-outline"
-                  size={18}
-                  color="#6b7280"
-                />
-                <View style={s.detailTextBlock}>
-                  <Text style={s.detailLabel}>
-                    {t('stats.totalTime')}
-                  </Text>
-                  <Text style={s.detailValue}>18 h 24 min</Text>
-                </View>
-              </View>
-
-              <Text
-                style={[
-                  s.sectionHelp,
-                  isDark && s.sectionHelpDark,
-                ]}
-              >
-
+            <View style={s.detailTextBlock}>
+              <Text style={[s.detailLabel, isDark && { color: '#94a3b8' }]}>{t('stats.taxiKm')}</Text>
+              <Text style={[s.detailValue, isDark && { color: '#e2e8f0' }]}>
+                {hasTrips ? `${taxiKm.toFixed(1)} km` : '—'}
               </Text>
             </View>
           </View>
-        </ScrollView>
-      </SafeAreaView>
-    </LinearGradient>
+
+          <View style={s.detailRow}>
+            <View style={[s.detailIcon, { backgroundColor: 'rgba(16,185,129,0.15)' }]}>
+              <Ionicons name="time-outline" size={18} color="#10b981" />
+            </View>
+            <View style={s.detailTextBlock}>
+              <Text style={[s.detailLabel, isDark && { color: '#94a3b8' }]}>{t('stats.totalTime')}</Text>
+              <Text style={[s.detailValue, isDark && { color: '#e2e8f0' }]}>
+                {hasTrips ? `${Math.floor(totalMin / 60)} h ${Math.round(totalMin % 60)} min` : '—'}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  bg: { flex: 1 },
-  safeArea: { flex: 1 },
-
-  circle1: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: 'rgba(94,168,122,0.16)',
-    top: -80,
-    right: -80,
-  },
-  circle2: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(44,95,63,0.26)',
-    bottom: 80,
-    left: -60,
-  },
-  circle3: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(168,217,188,0.16)',
-    top: 220,
-    left: 20,
-  },
-
-  scroll: {
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xl,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-  },
-  wrapper: {
-    width: '100%',
-    maxWidth: 900,
-  },
-
-  headerRow: {
+  page: { flex: 1, backgroundColor: '#f0fdf4' },
+  pageDark: { backgroundColor: '#0B1215' },
+  header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
   },
-  headerLeft: {
-    flex: 1,
-  },
-  backBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 4,
-  },
-  backText: {
-    fontFamily: 'Times New Roman',
-    fontSize: 13,
-    color: '#bbf7d0',
-  },
-  headerTextBlock: {
-    flex: 1,
-  },
-  title: {
-    fontFamily: 'Times New Roman',
-    fontSize: 24,
-    color: '#f9fafb',
-  },
-  subtitle: {
-    fontFamily: 'Times New Roman',
-    fontSize: 13,
-    color: 'rgba(241,245,249,0.9)',
-    marginTop: 4,
-    lineHeight: 18,
-    textAlign: 'left',
-  },
-  exportIconRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  exportIconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(249,250,251,0.96)',
+  headerDark: { backgroundColor: 'rgba(22,35,41,0.95)', borderBottomColor: '#26383D' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  logoBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#10b981',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#1f2937', flexShrink: 1 },
+  pillBtn: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.6)',
+    borderColor: '#e5e7eb',
+    alignItems: 'center',
   },
 
-  summaryRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: spacing.md,
-  },
-  summaryCard: {
-    flex: 1,
-    borderRadius: 18,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(249,250,251,0.92)',
+  scroll: { padding: 16, paddingBottom: 100, gap: 16 },
+
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.35)',
+    borderColor: '#dcfce7',
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
-  summaryTextBlock: { flex: 1 },
-  summaryLabel: {
-    fontFamily: 'Times New Roman',
-    fontSize: 11,
-    color: '#4b5563',
+  cardDark: { backgroundColor: '#162329', borderColor: '#26383D' },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: '#1f2937', marginBottom: 4 },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 12 },
+  statCard: {
+    flex: 1,
+    minWidth: 140,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#f3f4f6',
+    alignItems: 'center',
   },
-  summaryValue: {
-    fontFamily: 'Times New Roman',
-    fontSize: 16,
-    color: '#022c22',
+  statCardDark: { backgroundColor: 'rgba(11,18,21,0.4)', borderColor: '#26383D' },
+  statIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
+  statValue: { fontSize: 18, fontWeight: '800', color: '#1f2937' },
+  statLabel: { fontSize: 10, color: '#6b7280', textAlign: 'center', marginTop: 2 },
 
   chartCard: {
-    borderRadius: 22,
-    backgroundColor: '#f9fafb',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.md,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.35)',
+    borderColor: '#dcfce7',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
-  chartCardDark: {
-    backgroundColor: 'rgba(15,23,23,0.97)',
-    borderColor: 'rgba(148,163,184,0.4)',
-  },
-  sectionTitle: {
-    fontFamily: 'Times New Roman',
-    fontSize: 17,
-    color: '#0f172a',
-    marginBottom: 4,
-  },
-  sectionTitleDark: { color: '#e5f9f0' },
-  sectionHelp: {
-    fontFamily: 'Times New Roman',
-    fontSize: 12,
-    color: '#6b7280',
-    marginBottom: spacing.sm,
-  },
-  sectionHelpDark: { color: '#9ca3af' },
+  chartCardDark: { backgroundColor: '#162329', borderColor: '#26383D' },
+  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#1f2937', marginBottom: 4 },
+  sectionTitleDark: { color: '#e2e8f0' },
+  sectionHelp: { fontSize: 12, color: '#6b7280', marginBottom: 12 },
+  sectionHelpDark: { color: '#94a3b8' },
 
-  chartWrapper: {
-    width: '100%',
-    overflow: 'hidden',
-    borderRadius: 16,
-  },
+  chartWrapper: { width: '100%', overflow: 'hidden', borderRadius: 16, alignItems: 'center' },
   chartWrapperCenter: {
     width: '100%',
     alignItems: 'center',
     overflow: 'hidden',
     borderRadius: 16,
   },
-  chart: {
-    borderRadius: 16,
-  },
+  chart: { borderRadius: 16 },
 
   detailCard: {
-    borderRadius: 22,
     backgroundColor: '#ecfdf5',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.md,
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#dcfce7',
   },
-  detailCardDark: {
-    backgroundColor: 'rgba(15,23,23,0.97)',
-  },
+  detailCardDark: { backgroundColor: 'rgba(11,18,21,0.4)', borderColor: '#26383D' },
   detailRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 12,
     alignItems: 'center',
-    marginTop: 6,
+    marginTop: 12,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#f3f4f6',
+  },
+  detailIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   detailTextBlock: { flex: 1 },
-  detailLabel: {
-    fontFamily: 'Times New Roman',
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  detailValue: {
-    fontFamily: 'Times New Roman',
-    fontSize: 13,
-    color: '#0f172a',
-  },
+  detailLabel: { fontSize: 11, color: '#6b7280' },
+  detailValue: { fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 2 },
 });

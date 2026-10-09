@@ -48,7 +48,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (stored) {
           const parsed = JSON.parse(stored);
           const accessToken = await SecureStore.getItemAsync('accessToken');
-          if (accessToken || parsed?.guest) {
+          if (parsed?.guest) {
+            // Invitado = sin sesión. Si quedó un token de un inicio de sesión
+            // anterior, lo borramos: si no, apiClient seguiría mandando
+            // Authorization con la cuenta real y el invitado vería los datos
+            // de esa persona (historial, favoritos, etc.).
+            if (accessToken) {
+              await SecureStore.deleteItemAsync('accessToken');
+              await SecureStore.deleteItemAsync('refreshToken');
+              await SecureStore.deleteItemAsync('userId');
+            }
+            setAuth(parsed);
+          } else if (accessToken) {
             setAuth(parsed);
           }
         }
@@ -105,6 +116,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const enterGuest = async () => {
+    // Primero cerramos cualquier sesión guardada: entrar de invitado debe
+    // dejar la app SIN token, o la API seguiría actuando como el usuario
+    // que había entrado antes (bug: el invitado veía la cuenta real).
+    await SecureStore.deleteItemAsync('accessToken');
+    await SecureStore.deleteItemAsync('refreshToken');
+    await SecureStore.deleteItemAsync('userId');
+
     const authData: AuthState = {
       email: null,
       role: null,

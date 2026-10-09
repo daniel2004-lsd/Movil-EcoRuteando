@@ -39,6 +39,8 @@ interface RouteBottomSheetProps {
   onAddStop?: () => void;
   onShare?: () => void;
   onSave?: () => void;
+  onToggleFavorite?: () => void;
+  routeFavorited?: boolean;
   onReport?: () => void;
   routeSaved?: boolean;
   stopName?: string | null;
@@ -69,6 +71,8 @@ export function RouteBottomSheet({
   onAddStop,
   onShare,
   onSave,
+  onToggleFavorite,
+  routeFavorited = false,
   onReport,
   routeSaved = false,
   stopName = null,
@@ -268,7 +272,7 @@ export function RouteBottomSheet({
         )}
 
         {/* Acciones rápidas estilo Google Maps: Agregar paradas / Compartir / Guardar */}
-        {!activeTripId && (onAddStop || onShare || onSave) && (
+        {!activeTripId && (onAddStop || onShare || onSave || onToggleFavorite) && (
           <View style={styles.actionRow}>
             {onAddStop && (
               <TouchableOpacity style={styles.actionItem} onPress={onAddStop} activeOpacity={0.7}>
@@ -297,6 +301,20 @@ export function RouteBottomSheet({
                 </View>
                 <Text style={[styles.actionLabel, routeSaved && { color: '#16a34a' }]}>
                   {routeSaved ? t('routeSheet.saved') : t('routeSheet.save')}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {onToggleFavorite && (
+              <TouchableOpacity style={styles.actionItem} onPress={onToggleFavorite} activeOpacity={0.7}>
+                <View style={styles.actionCircle}>
+                  <Ionicons
+                    name={routeFavorited ? 'heart' : 'heart-outline'}
+                    size={20}
+                    color={routeFavorited ? '#ef4444' : '#1a73e8'}
+                  />
+                </View>
+                <Text style={[styles.actionLabel, routeFavorited && { color: '#ef4444' }]}>
+                  {routeFavorited ? t('routeSheet.favorited') : t('routeSheet.favorite')}
                 </Text>
               </TouchableOpacity>
             )}

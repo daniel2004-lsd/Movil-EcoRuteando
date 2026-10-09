@@ -1,16 +1,8 @@
 // app/(tabs)/report.tsx
+import { Dialog } from '../../src/shared/components/ui/AppDialog';
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Platform,
-  Image,
-  Alert,
-} from 'react-native';
+import { 
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Image,  } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -20,6 +12,7 @@ import { spacing, colors } from '../../src/shared/theme';
 import { useAuth } from '../../src/shared/store/AuthContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 import apiClient from '../../src/shared/services/apiClient';
+import * as ImagePicker from 'expo-image-picker';
 
 
 export default function ReportScreen() {
@@ -64,7 +57,7 @@ const OBSTACLE_TYPES = [
   },
 ];
 
-  const userEmail = auth.email ?? 'usuario@ecoruteando.com';
+  const userEmail = auth.email ?? t('home.guestUser');
 
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [showTypeList, setShowTypeList] = useState(false);
@@ -75,7 +68,13 @@ const OBSTACLE_TYPES = [
   const insets = useSafeAreaInsets();
 
   const handlePickPhoto = async () => {
-    setPhotoUri('https://via.placeholder.com/300x180.png?text=Foto+del+obstaculo');
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Dialog.alert(t('planRoute.permissionDeniedTitle'), t('report.gpsMsg'), { tone: 'warning', icon: 'images' });
+      return;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
+    if (!res.canceled && res.assets?.[0]?.uri) setPhotoUri(res.assets[0].uri);
   };
 
   const handleSend = async () => {
@@ -87,10 +86,10 @@ const OBSTACLE_TYPES = [
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
+        Dialog.alert(
           t('planRoute.permissionDeniedTitle'),
           t('report.gpsMsg')
-        );
+        , { tone: 'warning', icon: 'location' });
         return;
       }
 
@@ -104,9 +103,9 @@ const OBSTACLE_TYPES = [
         addressText: location.trim(),
       });
 
-      Alert.alert(t('report.sentTitle'), t('report.sentMsgFull'));
+      Dialog.alert(t('report.sentTitle'), t('report.sentMsgFull'));
     } catch (e: any) {
-      Alert.alert(t('report.sendFailedTitle'), e?.message ?? t('planRoute.unexpectedError'));
+      Dialog.alert(t('report.sendFailedTitle'), e?.message ?? t('planRoute.unexpectedError'), { tone: 'error' });
       return;
     }
 

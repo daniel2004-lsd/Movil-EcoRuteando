@@ -29,7 +29,6 @@ interface ExploreSheetProps {
 
 const ACTIONS: { key: ExploreAction; labelKey: string; icon: string }[] = [
   { key: 'plan', labelKey: 'home.modPlan', icon: 'navigate-outline' },
-  { key: 'favorites', labelKey: 'tabs.favorites', icon: 'heart-outline' },
   { key: 'history', labelKey: 'tabs.history', icon: 'time-outline' },
 ];
 
