@@ -90,7 +90,7 @@ export default function RecoverCodeScreen() {
       await apiClient.post('/api/auth/forgot-password', { email });
       setError(null);
     } catch {
-      setError('Error al reenviar codigo');
+      setError(t('auth.resendError'));
     }
   };
 
@@ -186,7 +186,9 @@ export default function RecoverCodeScreen() {
               {code.map((v, i) => (
                 <TextInput
                   key={i}
-                  ref={ref => (inputs.current[i] = ref)}
+                  ref={ref => {
+                    inputs.current[i] = ref;
+                  }}
                   style={[
                     s.codeInput,
                     activeIndex === i && {
