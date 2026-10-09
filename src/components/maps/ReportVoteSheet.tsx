@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { NearbyReport } from '../../services/reports';
 import { reportTypeEs } from '../../utils/reportTypeEs';
+import { useLanguage } from '../../shared/store/LanguageContext';
 
 interface Props {
   report: NearbyReport;
@@ -12,10 +13,10 @@ interface Props {
 }
 
 const STATE_LABELS: Record<string, { text: string; color: string }> = {
-  active: { text: 'Activo', color: '#1a73e8' },
-  confirmed: { text: 'Confirmado', color: '#16a34a' },
-  disputed: { text: 'Disputado', color: '#d93025' },
-  expired: { text: 'Expirado', color: '#5f6368' },
+  active: { text: 'report.voteActive', color: '#1a73e8' },
+  confirmed: { text: 'report.voteConfirmed', color: '#16a34a' },
+  disputed: { text: 'report.voteDisputed', color: '#d93025' },
+  expired: { text: 'report.voteExpired', color: '#5f6368' },
 };
 
 /**
@@ -23,6 +24,7 @@ const STATE_LABELS: Record<string, { text: string; color: string }> = {
  * "¿Sigue ocurriendo?" y los botones de voto comunitario.
  */
 export function ReportVoteSheet({ report, voting, onClose, onVote }: Props) {
+  const { t } = useLanguage();
   const high = report.confidenceScore >= 70;
   const accent = high ? '#16a34a' : '#d97706';
   const state = STATE_LABELS[report.state] ?? STATE_LABELS.active;
@@ -35,10 +37,10 @@ export function ReportVoteSheet({ report, voting, onClose, onVote }: Props) {
         </View>
         <View style={styles.headerTexts}>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {reportTypeEs(report.reportType)}
+            {reportTypeEs(report.reportType, t)}
           </Text>
           <Text style={styles.headerSubtitle} numberOfLines={1}>
-            {(report.addressText ?? 'Reporte cercano') } · {Math.round(report.distanceMeters)} m
+            {(report.addressText ?? t('report.nearbyReport')) } · {Math.round(report.distanceMeters)} m
           </Text>
         </View>
         <TouchableOpacity onPress={onClose} hitSlop={10} style={styles.closeBtn}>
@@ -64,11 +66,11 @@ export function ReportVoteSheet({ report, voting, onClose, onVote }: Props) {
           <Text style={styles.statChipText}>{report.rejectCount}</Text>
         </View>
         <View style={[styles.stateChip, { backgroundColor: `${state.color}1f` }]}>
-          <Text style={[styles.stateChipText, { color: state.color }]}>{state.text}</Text>
+          <Text style={[styles.stateChipText, { color: state.color }]}>{t(state.text)}</Text>
         </View>
       </View>
 
-      <Text style={styles.question}>¿Sigue ocurriendo?</Text>
+      <Text style={styles.question}>{t('report.stillHappening')}</Text>
 
       <View style={styles.voteRow}>
         <TouchableOpacity
@@ -78,7 +80,7 @@ export function ReportVoteSheet({ report, voting, onClose, onVote }: Props) {
           activeOpacity={0.8}
         >
           <Ionicons name="thumbs-up" size={16} color="#16a34a" />
-          <Text style={styles.voteYesText}>{voting ? 'Enviando…' : 'Sí'}</Text>
+          <Text style={styles.voteYesText}>{voting ? t('report.sending') : t('report.yes')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.voteBtn, styles.voteNo, voting && styles.voteBtnDisabled]}
@@ -87,14 +89,11 @@ export function ReportVoteSheet({ report, voting, onClose, onVote }: Props) {
           activeOpacity={0.8}
         >
           <Ionicons name="thumbs-down" size={16} color="#dc2626" />
-          <Text style={styles.voteNoText}>{voting ? 'Enviando…' : 'No'}</Text>
+          <Text style={styles.voteNoText}>{voting ? t('report.sending') : t('report.no')}</Text>
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.hint}>
-        Solo puedes votar cerca del reporte (máx. 500 m). Tu voto es único y anónimo para
-        otros usuarios.
-      </Text>
+      <Text style={styles.hint}>{t('report.voteHint')}</Text>
     </View>
   );
 }

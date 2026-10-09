@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as SecureStore from './keyStorage';
+import { tGlobal } from '../../i18n/translations';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5124';
 
@@ -83,7 +84,7 @@ apiClient.interceptors.response.use(
             .join(' ')
         : null) ||
       error.message ||
-      'Error de conexion';
+      tGlobal('common.networkError');
     if (error.response) {
       error.message = message;
       return Promise.reject(error);

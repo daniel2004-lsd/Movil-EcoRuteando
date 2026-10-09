@@ -49,6 +49,8 @@ function haversineKm(
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+import { useLanguage } from '../../shared/store/LanguageContext';
+
 export function AddStopSheet({
   origin,
   destination,
@@ -62,6 +64,7 @@ export function AddStopSheet({
   onAddPlace,
   onClose,
 }: Props) {
+  const { t } = useLanguage();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PlaceSuggestion[]>([]);
   const [searching, setSearching] = useState(false);
@@ -119,24 +122,24 @@ export function AddStopSheet({
     const via =
       haversineKm(origin, p) + haversineKm(p, destination);
     const extraKm = Math.max(0, via - direct) * 1.3;
-    if (extraKm < 0.05) return { text: 'En tu ruta', onRoute: true };
+    if (extraKm < 0.05) return { text: t('addStop.onRoute'), onRoute: true };
     const speed = mode === 'walking' ? 4.5 : 22;
     const min = Math.max(1, Math.round((extraKm / speed) * 60));
-    return { text: `más de ${min} min`, onRoute: false };
+    return { text: t('addStop.extraMin').replace('{n}', String(min)), onRoute: false };
   };
 
   const sectionTitle = activeCategory
     ? ['restaurant', 'cafe'].includes(activeCategory.id)
-      ? `Los mejores ${activeCategory.label.toLowerCase()}`
-      : activeCategory.label
-    : 'Cerca de tu ruta';
+      ? t('addStop.bestOf').replace('{name}', t(`poiCats.${activeCategory.id}`).toLowerCase())
+      : t(`poiCats.${activeCategory.id}`)
+    : t('poi.distance.nearRoute');
 
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Agrega paradas a tu ruta</Text>
-          <Text style={styles.subtitle}>Encuentra cafeterías, parques y mucho más</Text>
+          <Text style={styles.title}>{t('addStop.title')}</Text>
+          <Text style={styles.subtitle}>{t('addStop.subtitle')}</Text>
         </View>
         <TouchableOpacity
           onPress={onClose}
@@ -151,7 +154,7 @@ export function AddStopSheet({
         <Ionicons name="search" size={18} color="#5f6368" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Buscar en la ruta"
+          placeholder={t('addStop.searchPlaceholder')}
           placeholderTextColor="#9aa0a6"
           value={query}
           onChangeText={setQuery}
@@ -218,7 +221,7 @@ export function AddStopSheet({
                 activeOpacity={0.85}
               >
                 <Ionicons name={c.icon as any} size={15} color={on ? '#fff' : '#5f6368'} />
-                <Text style={[styles.chipLabel, on && styles.chipLabelOn]}>{c.label}</Text>
+                <Text style={[styles.chipLabel, on && styles.chipLabelOn]}>{t(`poiCats.${c.id}`)}</Text>
               </TouchableOpacity>
             );
           })}
@@ -235,9 +238,7 @@ export function AddStopSheet({
         <View style={styles.centerBox}>
           <Ionicons name="storefront-outline" size={22} color="#9aa0a6" />
           <Text style={styles.emptyText}>
-            {activeCategory
-              ? 'No encontramos lugares cerca. Prueba otra categoría.'
-              : 'Elige una categoría o busca un lugar para agregarlo.'}
+            {activeCategory ? t('addStop.empty') : t('addStop.hint')}
           </Text>
         </View>
       ) : (
@@ -293,7 +294,7 @@ export function AddStopSheet({
                 )}
                 <View style={styles.addRow}>
                   <Ionicons name="add-circle" size={14} color="#16a34a" />
-                  <Text style={styles.addText}>Agregar</Text>
+                  <Text style={styles.addText}>{t('addStop.add')}</Text>
                 </View>
               </TouchableOpacity>
             );

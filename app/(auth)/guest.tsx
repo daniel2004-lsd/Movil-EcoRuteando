@@ -7,7 +7,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
-  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -140,15 +139,6 @@ export default function GuestScreen() {
               {t('guest.mapSubtitle')}
             </Text>
 
-            <View style={s.mapWrapper}>
-              <Image
-                source={{
-                  uri: 'https://i.pinimg.com/736x/29/66/90/296690281362a86d5e6a5caa2da141bd.jpg',
-                }}
-                style={s.mapImage}
-                resizeMode="cover"
-              />
-            </View>
           </View>
 
           {/* CTA */}
@@ -314,17 +304,6 @@ const s = StyleSheet.create({
     color: '#f0fdf4',
   },
 
-  mapWrapper: {
-    marginTop: spacing.sm,
-    borderRadius: 18,
-    overflow: 'hidden',
-    backgroundColor: '#020617',
-    minHeight: 220,
-  },
-  mapImage: {
-    width: '100%',
-    height: 220,
-  },
 
   ctaCard: {
     borderRadius: 24,

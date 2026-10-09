@@ -19,12 +19,14 @@ import { GradientButton } from '../../src/shared/components/ui/GradientButton';
 import { colors, spacing } from '../../src/shared/theme';
 import { LogoCircle } from '../../src/shared/components/landing/LogoCircle';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
+import { useLanguage } from '../../src/shared/store/LanguageContext';
 import apiClient from '../../src/shared/services/apiClient';
 
 export default function RecoverNewPasswordScreen() {
   const router = useRouter();
   const { email, token } = useLocalSearchParams<{ email?: string; token?: string }>();
   const { theme } = useThemeMode();
+  const { t } = useLanguage();
   const isDark = theme === 'dark';
 
   const [pass, setPass] = useState('');
@@ -53,15 +55,15 @@ export default function RecoverNewPasswordScreen() {
 
   const handleSubmit = async () => {
     if (!pass || !pass2) {
-      setError('Completa ambos campos');
+      setError(t('auth.fillBothFields'));
       return;
     }
     if (pass.length < 8) {
-      setError('La contrasena debe tener al menos 8 caracteres');
+      setError(t('auth.passwordMin8Error'));
       return;
     }
     if (pass !== pass2) {
-      setError('Las contrasenas no coinciden');
+      setError(t('auth.passwordMismatch'));
       return;
     }
     setError(null);
@@ -73,7 +75,7 @@ export default function RecoverNewPasswordScreen() {
       });
       router.replace('/(auth)/login');
     } catch (err: any) {
-      setError(err?.message || 'Error al restablecer contrasena');
+      setError(err?.message || t('auth.resetPassError'));
     } finally {
       setLoading(false);
     }
@@ -103,7 +105,7 @@ export default function RecoverNewPasswordScreen() {
             <View style={s.logoCircleOuter}>
               <LogoCircle size={42} />
             </View>
-            <Text style={s.logoTitle}>EcoRuteando</Text>
+            <Text style={s.logoTitle}>{t('common.appName')}</Text>
           </View>
 
           <Animated.View
@@ -117,11 +119,11 @@ export default function RecoverNewPasswordScreen() {
             ]}
           >
             <View style={s.stepsRow}>
-              <StepDot label="CORREO" index={1} done />
+              <StepDot label={t('auth.stepEmailLabel')} index={1} done />
               <StepSeparator />
-              <StepDot label="CÓDIGO" index={2} done />
+              <StepDot label={t('auth.stepCodeLabel')} index={2} done />
               <StepSeparator />
-              <StepDot label="CONTRASEÑA" index={3} active />
+              <StepDot label={t('auth.stepPasswordLabel')} index={3} active />
             </View>
 
             <View style={s.iconCircle}>
@@ -132,30 +134,30 @@ export default function RecoverNewPasswordScreen() {
               />
             </View>
 
-            <Text style={s.title}>Nueva contraseña</Text>
+            <Text style={s.title}>{t('auth.newPasswordTitle')}</Text>
             <Text style={s.subtitle}>
-              Elige una contraseña segura para proteger tu cuenta
+              {t('auth.newPasswordSubtitle')}
               {email ? ` (${email})` : ''}.
             </Text>
 
             <InputField
-              label="Nueva contraseña"
+              label={t('auth.newPasswordTitle')}
               value={pass}
               onChangeText={setPass}
-              placeholder="Mín. 8 caracteres"
+              placeholder={t('auth.passwordMinShort')}
               isPassword
             />
             <InputField
-              label="Confirmar nueva contraseña"
+              label={t('auth.confirmNewPasswordLabel')}
               value={pass2}
               onChangeText={setPass2}
-              placeholder="Repite tu contraseña"
+              placeholder={t('auth.confirmPasswordPlaceholder')}
               isPassword
             />
             {error && <Text style={s.error}>{error}</Text>}
 
             <GradientButton
-              title="Restablecer contraseña"
+              title={t('auth.resetPasswordButton')}
               onPress={handleSubmit}
               loading={loading}
               style={{ marginTop: spacing.md }}
@@ -170,7 +172,7 @@ export default function RecoverNewPasswordScreen() {
                 size={18}
                 color={colors.textMuted}
               />
-              <Text style={s.backText}>Volver al inicio de sesión</Text>
+              <Text style={s.backText}>{t('auth.backToLogin')}</Text>
             </TouchableOpacity>
           </Animated.View>
         </ScrollView>
