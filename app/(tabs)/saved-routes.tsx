@@ -1,14 +1,16 @@
-// app/(tabs)/saved-routes.tsx — «Mis rutas»: lista las rutas guardadas por el usuario.
-// Estilo alineado al dashboard (inicio): fondo #f0fdf4, tarjetas blancas, cabecera con la hoja.
+// app/(tabs)/saved-routes.tsx — «Mis rutas»: lista unificada de rutas creadas y favoritas.
+// Estilo alineado al dashboard (inicio): fondo #f0fdf4, tarjetas blancas, selector tipo pestañas (Google Maps).
 import { Dialog } from '../../src/shared/components/ui/AppDialog';
 import React, { useCallback, useState } from 'react';
 import { 
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput,  } from 'react-native';
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, 
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
+import { useAuth } from '../../src/shared/store/AuthContext';
 import apiClient from '../../src/shared/services/apiClient';
 
 type SavedRoute = {
@@ -21,6 +23,11 @@ type SavedRoute = {
   distanceKm: number | null;
   estimatedTimeMin: number | null;
   co2SavedKg: number | null;
+  startLat?: number | null;
+  startLng?: number | null;
+  endLat?: number | null;
+  endLng?: number | null;
+  isFavorite?: boolean;
 };
 
 const TRANSPORT_ICON: Record<string, string> = {
@@ -33,29 +40,61 @@ const TRANSPORT_ICON: Record<string, string> = {
 
 export default function SavedRoutesScreen() {
   const router = useRouter();
+  const searchParams = useLocalSearchParams();
+  const { auth } = useAuth();
+  const isGuest = !!auth.guest;
   const { theme } = useThemeMode();
   const { t } = useLanguage();
   const isDark = theme === 'dark';
 
+  const [activeTab, setActiveTab] = useState<'all' | 'favorites'>(
+    searchParams.tab === 'favorites' ? 'favorites' : 'all'
+  );
   const [routes, setRoutes] = useState<SavedRoute[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState('');
+  const [togglingFavId, setTogglingFavId] = useState<string | null>(null);
 
-  const fetchRoutes = useCallback(async () => {
+  // Sincronizar parámetro de búsqueda de tab si cambia
+  React.useEffect(() => {
+    if (searchParams.tab === 'favorites') {
+      setActiveTab('favorites');
+    } else if (searchParams.tab === 'all') {
+      setActiveTab('all');
+    }
+  }, [searchParams.tab]);
+
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
     try {
-      // mine=true → el backend devuelve solo las rutas creadas por este usuario.
-      const { data } = await apiClient.get('/api/routes', {
-        params: { mine: true, includeInactive: true },
+      const [routesRes, favsRes] = await Promise.all([
+        apiClient.get('/api/routes', {
+          params: { mine: true, includeInactive: true },
+        }),
+        apiClient.get('/api/favorites').catch(() => ({ data: [] })),
+      ]);
+
+      const items: any[] = Array.isArray(routesRes.data) ? routesRes.data : [];
+      const favItems: any[] = Array.isArray(favsRes.data)
+        ? favsRes.data
+        : (favsRes.data?.items ?? []);
+
+      const favSet = new Set<string>();
+      favItems.forEach((f: any) => {
+        const id = f.routeId || f.id;
+        if (id) favSet.add(String(id));
       });
-      const items: any[] = Array.isArray(data) ? data : [];
-      setRoutes(
-        items
-          .filter(r => r && r.id)
-          .map((r, i): SavedRoute => ({
-            id: r.id ?? `route-${i}`,
+      setFavoriteIds(favSet);
+
+      const parsedRoutes: SavedRoute[] = items
+        .filter(r => r && r.id)
+        .map((r, i): SavedRoute => {
+          const rId = String(r.id ?? `route-${i}`);
+          return {
+            id: rId,
             name: r.name || `${r.startName ?? ''} → ${r.destinationName ?? ''}`,
             transportType: r.transportType || 'walking',
             status: r.status || 'active',
@@ -64,32 +103,142 @@ export default function SavedRoutesScreen() {
             distanceKm: r.distanceKm ?? null,
             estimatedTimeMin: r.estimatedTimeMin ?? null,
             co2SavedKg: r.co2SavedKg ?? null,
-          }))
-      );
+            startLat: r.startLatitude ?? r.startLat ?? null,
+            startLng: r.startLongitude ?? r.startLng ?? null,
+            endLat: r.endLatitude ?? r.endLat ?? null,
+            endLng: r.endLongitude ?? r.endLng ?? null,
+            isFavorite: favSet.has(rId),
+          };
+        });
+
+      // Incluir también las rutas de favoritos que no estén ya en la lista de creadas
+      favItems.forEach((f: any, i: number) => {
+        const fId = String(f.routeId || f.id || `fav-${i}`);
+        const alreadyExists = parsedRoutes.some(pr => pr.id === fId);
+        if (!alreadyExists && fId) {
+          const name: string = f.routeName || '';
+          const parts = name.split(/\s*→\s*/);
+          parsedRoutes.push({
+            id: fId,
+            name: name || t('favorites.defaultName'),
+            transportType: f.transportMode ?? f.transportType ?? 'car',
+            status: 'active',
+            startName: f.originAddress ?? (parts[0] || name || t('savedRoutes.origin')),
+            destinationName: f.destinationAddress ?? (parts[parts.length - 1] || t('savedRoutes.destination')),
+            distanceKm: f.distanceKm ?? null,
+            estimatedTimeMin: f.estimatedTimeMin ?? null,
+            co2SavedKg: f.co2SavedKg ?? null,
+            startLat: f.startLat ?? null,
+            startLng: f.startLng ?? null,
+            endLat: f.endLat ?? null,
+            endLng: f.endLng ?? null,
+            isFavorite: true,
+          });
+        }
+      });
+
+      setRoutes(parsedRoutes);
     } catch {
       setLoadError(true);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
-  // Se recarga CADA VEZ que la pantalla gana el foco: si guardas una ruta en el
-  // planificador y vuelves, la lista aparece actualizada.
   useFocusEffect(
     useCallback(() => {
-      fetchRoutes();
-    }, [fetchRoutes])
+      fetchData();
+    }, [fetchData])
   );
+
+  const toggleFavorite = async (route: SavedRoute) => {
+    if (isGuest) {
+      Dialog.alert(
+        t('planRoute.needAccountTitle'),
+        t('planRoute.needAccountMsg').replace('{action}', t('savedRoutes.favoritesTab')),
+        [
+          { text: t('planRoute.notNow'), style: 'cancel' },
+          { text: t('auth.loginButton'), onPress: () => router.push('/(auth)/login') },
+        ],
+        { tone: 'info', icon: 'person-circle' }
+      );
+      return;
+    }
+
+    const isFav = favoriteIds.has(route.id);
+    setTogglingFavId(route.id);
+
+    // Optimistic update
+    const nextSet = new Set(favoriteIds);
+    if (isFav) {
+      nextSet.delete(route.id);
+    } else {
+      nextSet.add(route.id);
+    }
+    setFavoriteIds(nextSet);
+    setRoutes(prev =>
+      prev.map(r => (r.id === route.id ? { ...r, isFavorite: !isFav } : r))
+    );
+
+    try {
+      if (isFav) {
+        await apiClient.delete(`/api/favorites/${route.id}`);
+      } else {
+        await apiClient.post('/api/favorites', { routeId: route.id });
+      }
+    } catch {
+      // Revertir si falla
+      setFavoriteIds(favoriteIds);
+      setRoutes(prev =>
+        prev.map(r => (r.id === route.id ? { ...r, isFavorite: isFav } : r))
+      );
+      Dialog.alert(
+        t('planRoute.saveError'),
+        t('planRoute.unexpectedError'),
+        [{ text: t('common.ok') }],
+        { tone: 'error' }
+      );
+    } finally {
+      setTogglingFavId(null);
+    }
+  };
+
+  const useRouteInMap = (route: SavedRoute) => {
+    const parts: string[] = [];
+    if (route.startLat != null && route.startLng != null) {
+      parts.push(`originLat=${encodeURIComponent(String(route.startLat))}`);
+      parts.push(`originLng=${encodeURIComponent(String(route.startLng))}`);
+    }
+    if (route.endLat != null && route.endLng != null) {
+      parts.push(`destLat=${encodeURIComponent(String(route.endLat))}`);
+      parts.push(`destLng=${encodeURIComponent(String(route.endLng))}`);
+    }
+    if (route.startName) {
+      parts.push(`originName=${encodeURIComponent(route.startName)}`);
+    }
+    if (route.destinationName) {
+      parts.push(`destName=${encodeURIComponent(route.destinationName)}`);
+    }
+    if (route.transportType) {
+      parts.push(`mode=${encodeURIComponent(route.transportType)}`);
+    }
+    router.push(`/(tabs)/plan-route?${parts.join('&')}`);
+  };
 
   const doDelete = async (id: string) => {
     try {
       await apiClient.delete(`/api/routes/${id}`);
       setRoutes(prev => prev.filter(r => r.id !== id));
+      if (favoriteIds.has(id)) {
+        const nextSet = new Set(favoriteIds);
+        nextSet.delete(id);
+        setFavoriteIds(nextSet);
+      }
     } catch {
       Dialog.alert(t('savedRoutes.deleteTitle'), t('savedRoutes.deleteError'), {
-      tone: 'error',
-      icon: 'trash',
-    });
+        tone: 'error',
+        icon: 'trash',
+      });
     }
   };
 
@@ -113,19 +262,28 @@ export default function SavedRoutesScreen() {
     return value === path ? fallback : value;
   };
 
+  // Filtrado según pestaña activa
+  const tabFilteredRoutes = routes.filter(r => {
+    if (activeTab === 'favorites') {
+      return favoriteIds.has(r.id) || r.isFavorite;
+    }
+    return true;
+  });
+
   // Búsqueda local: filtra por nombre, origen o destino.
   const q = query.trim().toLowerCase();
   const visible = q
-    ? routes.filter(
+    ? tabFilteredRoutes.filter(
         r =>
           r.name.toLowerCase().includes(q) ||
           r.startName.toLowerCase().includes(q) ||
           r.destinationName.toLowerCase().includes(q)
       )
-    : routes;
+    : tabFilteredRoutes;
 
   const totalKm = routes.reduce((sum, r) => sum + (Number(r.distanceKm) || 0), 0);
   const totalCo2 = routes.reduce((sum, r) => sum + (Number(r.co2SavedKg) || 0), 0);
+  const favCount = routes.filter(r => favoriteIds.has(r.id) || r.isFavorite).length;
 
   const stats: { icon: string; color: string; tint: string; value: string; label: string }[] = [
     {
@@ -134,6 +292,13 @@ export default function SavedRoutesScreen() {
       tint: isDark ? '#34D399' : '#fff',
       value: loading ? '...' : String(routes.length),
       label: t('savedRoutes.countLabel'),
+    },
+    {
+      icon: 'heart',
+      color: 'rgba(244,63,94,0.2)',
+      tint: isDark ? '#fb7185' : '#fff',
+      value: loading ? '...' : String(favCount),
+      label: t('savedRoutes.favoritesTab'),
     },
     {
       icon: 'navigate',
@@ -181,7 +346,7 @@ export default function SavedRoutesScreen() {
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        {/* Resumen — misma tarjeta que el saludo del dashboard */}
+        {/* Resumen */}
         <View style={[s.card, isDark && s.cardDark]}>
           <Text style={[s.cardTitle, isDark && { color: '#e2e8f0' }]}>
             {t('savedRoutes.subtitle')}
@@ -203,21 +368,76 @@ export default function SavedRoutesScreen() {
           </View>
         </View>
 
-        {/* Cabecera de sección — igual que «Herramientas» */}
+        {/* Selector de pestañas unificado estilo Google Maps */}
+        <View style={[s.tabSelectorContainer, isDark && s.tabSelectorContainerDark]}>
+          <TouchableOpacity
+            style={[
+              s.tabButton,
+              activeTab === 'all' && s.tabButtonActive,
+              activeTab === 'all' && isDark && s.tabButtonActiveDark,
+            ]}
+            onPress={() => setActiveTab('all')}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="navigate"
+              size={16}
+              color={activeTab === 'all' ? '#10b981' : isDark ? '#94a3b8' : '#6b7280'}
+            />
+            <Text
+              style={[
+                s.tabButtonText,
+                isDark && { color: '#94a3b8' },
+                activeTab === 'all' && s.tabButtonTextActive,
+                activeTab === 'all' && isDark && { color: '#34d399' },
+              ]}
+            >
+              {t('savedRoutes.allRoutesTab')} ({routes.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              s.tabButton,
+              activeTab === 'favorites' && s.tabButtonActive,
+              activeTab === 'favorites' && isDark && s.tabButtonActiveDark,
+            ]}
+            onPress={() => setActiveTab('favorites')}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="heart"
+              size={16}
+              color={activeTab === 'favorites' ? '#f43f5e' : isDark ? '#94a3b8' : '#6b7280'}
+            />
+            <Text
+              style={[
+                s.tabButtonText,
+                isDark && { color: '#94a3b8' },
+                activeTab === 'favorites' && s.tabButtonTextActiveFav,
+                activeTab === 'favorites' && isDark && { color: '#fb7185' },
+              ]}
+            >
+              {t('savedRoutes.favoritesTab')} ({favCount})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Cabecera de sección */}
         <View style={s.toolsHeader}>
           <Text style={[s.toolsTitle, isDark && { color: '#e2e8f0' }]}>
-            {t('savedRoutes.listTitle')}
+            {activeTab === 'favorites' ? t('savedRoutes.favoritesTab') : t('savedRoutes.listTitle')}
           </Text>
           <Text style={[s.toolsCount, isDark && { color: '#94a3b8' }]}>
             {loading
               ? '...'
               : q
-                ? `${visible.length} / ${routes.length} ${t('savedRoutes.countLabel')}`
-                : `${routes.length} ${t('savedRoutes.countLabel')}`}
+                ? `${visible.length} / ${tabFilteredRoutes.length}`
+                : `${tabFilteredRoutes.length} ${t('savedRoutes.countLabel')}`}
           </Text>
         </View>
 
-        {/* Buscador — para que una ruta vieja no se pierda entre tantas */}
+        {/* Buscador */}
         <View style={[s.searchBox, isDark && s.searchBoxDark]}>
           <Ionicons name="search-outline" size={16} color={isDark ? '#94a3b8' : '#9ca3af'} />
           <TextInput
@@ -249,20 +469,33 @@ export default function SavedRoutesScreen() {
               <Text style={[s.emptyText, isDark && { color: '#e2e8f0' }]}>
                 {t('savedRoutes.loadError')}
               </Text>
-              <TouchableOpacity style={s.retryBtn} onPress={() => void fetchRoutes()}>
+              <TouchableOpacity style={s.retryBtn} onPress={() => void fetchData()}>
                 <Text style={s.retryText}>{t('savedRoutes.retry')}</Text>
               </TouchableOpacity>
             </View>
-          ) : routes.length === 0 ? (
+          ) : tabFilteredRoutes.length === 0 ? (
             <View style={[s.card, isDark && s.cardDark, s.emptyBox]}>
-              <View style={s.emptyIcon}>
-                <Ionicons name="bookmark-outline" size={30} color="#fff" />
+              <View
+                style={[
+                  s.emptyIcon,
+                  activeTab === 'favorites' && { backgroundColor: '#f43f5e' },
+                ]}
+              >
+                <Ionicons
+                  name={activeTab === 'favorites' ? 'heart-outline' : 'bookmark-outline'}
+                  size={30}
+                  color="#fff"
+                />
               </View>
               <Text style={[s.emptyText, isDark && { color: '#e2e8f0' }]}>
-                {t('savedRoutes.empty')}
+                {activeTab === 'favorites'
+                  ? t('savedRoutes.emptyFavorites')
+                  : t('savedRoutes.empty')}
               </Text>
               <Text style={[s.emptySub, isDark && { color: '#94a3b8' }]}>
-                {t('savedRoutes.emptySub')}
+                {activeTab === 'favorites'
+                  ? t('savedRoutes.emptyFavoritesSub')
+                  : t('savedRoutes.emptySub')}
               </Text>
             </View>
           ) : visible.length === 0 ? (
@@ -287,6 +520,7 @@ export default function SavedRoutesScreen() {
               const statusLabel = showStatus
                 ? labelOf(`savedRoutes.status.${route.status}`, route.status)
                 : '';
+              const isFav = favoriteIds.has(route.id) || !!route.isFavorite;
 
               return (
                 <View key={route.id} style={[s.routeCard, isDark && s.routeCardDark]}>
@@ -307,8 +541,27 @@ export default function SavedRoutesScreen() {
                       </Text>
                     </View>
 
-                    <View style={s.transportPill}>
-                      <Text style={s.transportPillText}>{transportLabel}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <View style={s.transportPill}>
+                        <Text style={s.transportPillText}>{transportLabel}</Text>
+                      </View>
+                      {/* Botón de favorito interactivo */}
+                      <TouchableOpacity
+                        onPress={() => toggleFavorite(route)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        disabled={togglingFavId === route.id}
+                        style={[
+                          s.favCircleBtn,
+                          isFav && s.favCircleBtnActive,
+                          isDark && { backgroundColor: isFav ? 'rgba(244,63,94,0.2)' : '#1e293b' },
+                        ]}
+                      >
+                        <Ionicons
+                          name={isFav ? 'heart' : 'heart-outline'}
+                          size={18}
+                          color={isFav ? '#f43f5e' : isDark ? '#94a3b8' : '#9ca3af'}
+                        />
+                      </TouchableOpacity>
                     </View>
                   </View>
 
@@ -371,6 +624,19 @@ export default function SavedRoutesScreen() {
 
                   <View style={s.actionsRow}>
                     <TouchableOpacity
+                      style={[
+                        s.useRouteBtn,
+                        isDark && { backgroundColor: '#064e3b', borderColor: '#059669' },
+                      ]}
+                      onPress={() => useRouteInMap(route)}
+                    >
+                      <Ionicons name="map-outline" size={14} color="#059669" />
+                      <Text style={[s.useRouteBtnText, isDark && { color: '#34d399' }]}>
+                        {t('savedRoutes.useRoute')}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
                       style={[s.deleteBtn, isDark && { backgroundColor: '#3f1d1d', borderColor: '#7f1d1d' }]}
                       onPress={() => askDelete(route)}
                     >
@@ -391,7 +657,6 @@ export default function SavedRoutesScreen() {
 }
 
 const s = StyleSheet.create({
-  // —— mismos tokens que app/(tabs)/index.tsx (dashboard) ——
   page: { flex: 1, backgroundColor: '#f0fdf4' },
   pageDark: { backgroundColor: '#0B1215' },
   header: {
@@ -414,7 +679,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoIcon: { fontSize: 20, color: '#fff' },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#1f2937', flexShrink: 1 },
   pillBtn: {
     flexDirection: 'row',
@@ -468,15 +732,57 @@ const s = StyleSheet.create({
   statValue: { fontSize: 18, fontWeight: '800', color: '#1f2937' },
   statLabel: { fontSize: 10, color: '#6b7280', textAlign: 'center' },
 
+  tabSelectorContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 16,
+    padding: 4,
+    marginTop: 18,
+    gap: 4,
+  },
+  tabSelectorContainerDark: { backgroundColor: '#162329' },
+  tabButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  tabButtonActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tabButtonActiveDark: {
+    backgroundColor: '#1f2937',
+  },
+  tabButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  tabButtonTextActive: {
+    color: '#059669',
+    fontWeight: '700',
+  },
+  tabButtonTextActiveFav: {
+    color: '#e11d48',
+    fontWeight: '700',
+  },
+
   toolsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    marginTop: 24,
+    marginTop: 20,
     marginBottom: 12,
   },
   toolsTitle: { fontSize: 20, fontWeight: '800', color: '#1f2937' },
-  toolsCount: { fontSize: 10, color: '#9ca3af', fontWeight: '600' },
+  toolsCount: { fontSize: 11, color: '#9ca3af', fontWeight: '600' },
 
   list: { gap: 12 },
 
@@ -519,6 +825,18 @@ const s = StyleSheet.create({
   },
   transportPillText: { fontSize: 11, fontWeight: '600', color: '#047857' },
 
+  favCircleBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  favCircleBtnActive: {
+    backgroundColor: '#ffe4e6',
+  },
+
   routeMainRow: { flexDirection: 'row', gap: 12 },
   routeLineCol: { alignItems: 'center', paddingTop: 2 },
   routeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10b981' },
@@ -556,7 +874,19 @@ const s = StyleSheet.create({
   },
   statusText: { fontSize: 11, fontWeight: '600', color: '#92400e' },
 
-  actionsRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 },
+  actionsRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginTop: 12 },
+  useRouteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  useRouteBtnText: { fontSize: 12, fontWeight: '600', color: '#059669' },
   deleteBtn: {
     flexDirection: 'row',
     alignItems: 'center',
