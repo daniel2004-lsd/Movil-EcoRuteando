@@ -52,7 +52,8 @@
           "photosPermission": "EcoRuteando usa tus fotos para adjuntar imágenes a los reportes de obstáculos.",
           "cameraPermission": "EcoRuteando usa la cámara para que fotografíes los obstáculos que encuentres en la vía."
         }
-      ]
+      ],
+      "expo-sharing"
     ]
   }
 }
