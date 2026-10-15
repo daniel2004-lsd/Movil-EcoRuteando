@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TRANSPORT_MODES } from '../../services/maps/googleMaps';
@@ -23,6 +23,7 @@ interface RouteBottomSheetProps {
   estimate?: {
     distanceKm?: number;
     estimatedTimeMin?: number;
+    co2EmissionsKg?: number | null;
     co2SavedKg?: number | null;
     estimatedCalories?: number | null;
   } | null;
@@ -54,6 +55,21 @@ interface RouteBottomSheetProps {
 const snapPoints = ['25%', '50%', '90%'];
 
 import { useLanguage } from '../../shared/store/LanguageContext';
+
+function TripTimer() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setSeconds(s => s + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const m = Math.floor(seconds / 60);
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return (
+    <Text style={{ marginLeft: 8, fontSize: 13, fontWeight: '700', color: '#16a34a', fontVariant: ['tabular-nums'] }}>
+      {m}:{s}
+    </Text>
+  );
+}
 
 export function RouteBottomSheet({
   route,
@@ -110,8 +126,13 @@ export function RouteBottomSheet({
     h = h % 12 || 12;
     return `${h}:${m} ${period}`;
   })();
-  const co2Label =
-    estimate?.co2SavedKg != null ? `-${estimate.co2SavedKg} kg` : route?.co2;
+  const co2Label = estimate
+    ? (estimate.co2SavedKg != null && estimate.co2SavedKg > 0
+        ? `-${estimate.co2SavedKg} kg`
+        : estimate.co2EmissionsKg != null
+          ? `${estimate.co2EmissionsKg} kg`
+          : null)
+    : route?.co2;
 
   return (
     <View
@@ -329,6 +350,7 @@ export function RouteBottomSheet({
                 <View style={styles.inProgressChip}>
                   <View style={styles.inProgressDot} />
                   <Text style={styles.inProgressText}>{t('routeSheet.inProgress')}</Text>
+                  <TripTimer />
                 </View>
                 <TouchableOpacity
                   style={[styles.primaryBtn, styles.completeBtn]}

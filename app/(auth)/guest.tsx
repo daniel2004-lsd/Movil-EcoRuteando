@@ -18,7 +18,7 @@ import { LogoCircle } from '../../src/shared/components/landing/LogoCircle';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 export default function GuestScreen() {
   const router = useRouter();
-  const { theme } = useThemeMode();
+  const { theme, toggleTheme } = useThemeMode();
   const isDark = theme === 'dark';
   const { t } = useLanguage();
   const { enterGuest } = useAuth();
@@ -45,16 +45,25 @@ export default function GuestScreen() {
           <LogoCircle size={32} />
           <Text style={s.appName}>EcoRuteando</Text>
         </View>
-        <TouchableOpacity
-          style={s.backRow}
-          onPress={() => router.back()}
-        >
-          <Ionicons
-            name="close-outline"
-            size={22}
-            color="#f9fafb"
-          />
-        </TouchableOpacity>
+        <View style={s.headerActions}>
+          <TouchableOpacity
+            style={s.themeBtn}
+            onPress={toggleTheme}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 16 }}>{isDark ? '☀️' : '🌙'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.backRow}
+            onPress={() => router.back()}
+          >
+            <Ionicons
+              name="close-outline"
+              size={22}
+              color="#f9fafb"
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -72,9 +81,9 @@ export default function GuestScreen() {
           </View>
 
           {/* Capacidades del modo invitado */}
-          <View style={s.card}>
-            <Text style={s.cardTitle}>{t('guest.capabilitiesTitle')}</Text>
-            <Text style={s.cardSubtitle}>{t('guest.capabilitiesSubtitle')}</Text>
+          <View style={[s.card, isDark && s.cardDark]}>
+            <Text style={[s.cardTitle, isDark && s.cardTitleDark]}>{t('guest.capabilitiesTitle')}</Text>
+            <Text style={[s.cardSubtitle, isDark && s.cardSubtitleDark]}>{t('guest.capabilitiesSubtitle')}</Text>
 
             {[
               { icon: 'search-outline', key: 'guest.capabilitySearch' },
@@ -85,16 +94,16 @@ export default function GuestScreen() {
               { icon: 'navigate-outline', key: 'guest.capabilityCurrentLocation' },
             ].map(item => (
               <View key={item.key} style={s.capRow}>
-                <View style={s.capIcon}>
-                  <Ionicons name={item.icon as any} size={15} color="#16a34a" />
+                <View style={[s.capIcon, isDark && { backgroundColor: 'rgba(22,163,74,0.25)' }]}>
+                  <Ionicons name={item.icon as any} size={15} color={isDark ? '#4ade80' : '#16a34a'} />
                 </View>
-                <Text style={s.capText}>{t(item.key)}</Text>
+                <Text style={[s.capText, isDark && s.capTextDark]}>{t(item.key)}</Text>
               </View>
             ))}
 
-            <View style={s.capNote}>
-              <Ionicons name="lock-closed-outline" size={13} color="#6b7280" />
-              <Text style={s.capNoteText}>{t('guest.guestNote')}</Text>
+            <View style={[s.capNote, isDark && s.capNoteDark]}>
+              <Ionicons name="lock-closed-outline" size={13} color={isDark ? '#94a3b8' : '#6b7280'} />
+              <Text style={[s.capNoteText, isDark && s.capNoteTextDark]}>{t('guest.guestNote')}</Text>
             </View>
 
             <TouchableOpacity
@@ -108,11 +117,11 @@ export default function GuestScreen() {
           </View>
 
           {/* Qué datos verás en tu ruta */}
-          <View style={s.card}>
-            <Text style={s.cardTitle}>
+          <View style={[s.card, isDark && s.cardDark]}>
+            <Text style={[s.cardTitle, isDark && s.cardTitleDark]}>
               {t('guest.routeTitle')}
             </Text>
-            <Text style={s.cardSubtitle}>
+            <Text style={[s.cardSubtitle, isDark && s.cardSubtitleDark]}>
               {t('guest.routeSubtitle')}
             </Text>
 
@@ -122,47 +131,36 @@ export default function GuestScreen() {
               { icon: 'leaf-outline', key: 'guest.featureCo2' },
             ].map(item => (
               <View key={item.key} style={s.capRow}>
-                <View style={s.capIcon}>
-                  <Ionicons name={item.icon as any} size={15} color="#16a34a" />
+                <View style={[s.capIcon, isDark && { backgroundColor: 'rgba(22,163,74,0.25)' }]}>
+                  <Ionicons name={item.icon as any} size={15} color={isDark ? '#4ade80' : '#16a34a'} />
                 </View>
-                <Text style={s.capText}>{t(item.key)}</Text>
+                <Text style={[s.capText, isDark && s.capTextDark]}>{t(item.key)}</Text>
               </View>
             ))}
           </View>
 
-          {/* Mapa demo */}
-          <View style={s.card}>
-            <Text style={s.cardTitle}>
-              {t('guest.mapTitle')}
-            </Text>
-            <Text style={s.cardSubtitle}>
-              {t('guest.mapSubtitle')}
-            </Text>
-
-          </View>
-
           {/* CTA */}
-          <View style={s.ctaCard}>
-            <Text style={s.ctaTitle}>
+          <View style={[s.ctaCard, isDark && s.ctaCardDark]}>
+            <Text style={[s.ctaTitle, isDark && s.ctaTitleDark]}>
               {t('guest.ctaTitle')}
             </Text>
-            <Text style={s.ctaText}>
+            <Text style={[s.ctaText, isDark && s.ctaTextDark]}>
               {t('guest.ctaText')}
             </Text>
 
             <View style={s.ctaButtonsRow}>
               <TouchableOpacity
-                style={s.primaryBtn}
+                style={[s.primaryBtn, isDark && s.primaryBtnDark]}
                 onPress={() => router.push('/(auth)/register')}
               >
                 <Text style={s.primaryBtnText}>{t('guest.ctaPrimaryBtn')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={s.secondaryBtn}
+                style={[s.secondaryBtn, isDark && s.secondaryBtnDark]}
                 onPress={() => router.push('/(auth)/login')}
               >
-                <Text style={s.secondaryBtnText}>{t('guest.ctaSecondaryBtn')}</Text>
+                <Text style={[s.secondaryBtnText, isDark && s.secondaryBtnTextDark]}>{t('guest.ctaSecondaryBtn')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -175,12 +173,12 @@ export default function GuestScreen() {
 const s = StyleSheet.create({
   bg: {
     flex: 1,
-    // más aire arriba en móvil para despegar del borde
-    paddingTop: Platform.OS === 'web' ? 24 : 28,
+    // más aire arriba en móvil para despegar de la barra de estado y notch
+    paddingTop: Platform.OS === 'web' ? 24 : 44,
   },
   header: {
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.lg,     // baja logo + título + X
+    paddingTop: Platform.OS === 'android' ? 44 : spacing.xl,     // asegura que no lo tape la barra de estado o notch
     paddingBottom: spacing.sm,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -197,6 +195,20 @@ const s = StyleSheet.create({
     fontSize: 22,
     color: '#f9fafb',
     marginTop: 2,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  themeBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(15,23,42,0.35)',
+    marginTop: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   backRow: {
     paddingVertical: 8,
@@ -238,17 +250,27 @@ const s = StyleSheet.create({
     borderColor: 'rgba(148,163,184,0.35)',
     marginBottom: spacing.md,
   },
+  cardDark: {
+    backgroundColor: 'rgba(15,23,42,0.85)',
+    borderColor: 'rgba(51,65,85,0.7)',
+  },
   cardTitle: {
     fontFamily: 'Times New Roman',
     fontSize: 18,
     color: '#0f172a',
     marginBottom: 4,
   },
+  cardTitleDark: {
+    color: '#f1f5f9',
+  },
   cardSubtitle: {
     fontFamily: 'Times New Roman',
     fontSize: 12,
     color: '#6b7280',
     marginBottom: spacing.sm,
+  },
+  cardSubtitleDark: {
+    color: '#94a3b8',
   },
 
   capRow: {
@@ -271,6 +293,9 @@ const s = StyleSheet.create({
     fontSize: 13,
     color: '#0f172a',
   },
+  capTextDark: {
+    color: '#e2e8f0',
+  },
   capNote: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -281,11 +306,17 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
+  capNoteDark: {
+    backgroundColor: 'rgba(30,41,59,0.7)',
+  },
   capNoteText: {
     flex: 1,
     fontFamily: 'Times New Roman',
     fontSize: 12,
     color: '#6b7280',
+  },
+  capNoteTextDark: {
+    color: '#94a3b8',
   },
   enterBtn: {
     flexDirection: 'row',
@@ -312,11 +343,19 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.lg,
   },
+  ctaCardDark: {
+    backgroundColor: 'rgba(15,23,42,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(51,65,85,0.7)',
+  },
   ctaTitle: {
     fontFamily: 'Times New Roman',
     fontSize: 18,
     color: '#0f172a',
     marginBottom: spacing.xs,
+  },
+  ctaTitleDark: {
+    color: '#f1f5f9',
   },
   ctaText: {
     fontFamily: 'Times New Roman',
@@ -324,6 +363,9 @@ const s = StyleSheet.create({
     color: '#0f172a',
     marginBottom: spacing.md,
     lineHeight: 18,
+  },
+  ctaTextDark: {
+    color: '#cbd5e1',
   },
   ctaButtonsRow: {
     flexDirection: 'row',
@@ -336,6 +378,9 @@ const s = StyleSheet.create({
     paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  primaryBtnDark: {
+    backgroundColor: '#10b981',
   },
   primaryBtnText: {
     fontFamily: 'Times New Roman',
@@ -352,9 +397,16 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#f9fafb',
   },
+  secondaryBtnDark: {
+    borderColor: '#475569',
+    backgroundColor: '#1e293b',
+  },
   secondaryBtnText: {
     fontFamily: 'Times New Roman',
     fontSize: 14,
     color: '#1f2937',
+  },
+  secondaryBtnTextDark: {
+    color: '#f1f5f9',
   },
 });
