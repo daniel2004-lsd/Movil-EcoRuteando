@@ -5,6 +5,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image,  } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
@@ -14,7 +15,8 @@ import apiClient from '../../src/shared/services/apiClient';
 import * as ImagePicker from 'expo-image-picker';
 import * as SecureStore from '../../src/shared/services/keyStorage';
 
-const AVATAR_STORE_KEY = 'profileAvatarUri';
+const avatarKeyFor = (userId: string | null) =>
+  userId ? `profileAvatarUri_${userId}` : 'profileAvatarUri';
 
 type TabKey = 'personal' | 'security' | 'support';
 
@@ -39,12 +41,6 @@ const LANG_OPTIONS = [
   { id: 'fr', labelKey: 'profile.languages.fr' },
   { id: 'pt', labelKey: 'profile.languages.pt' },
 ];
-const PRIORITY_OPTIONS = [
-  { id: 'low', labelKey: 'profile.support.priorities.low' },
-  { id: 'medium', labelKey: 'profile.support.priorities.medium' },
-  { id: 'high', labelKey: 'profile.support.priorities.high' },
-];
-
 function CardHeader({
   icon, color, title, subtitle, isDark,
 }: { icon: any; color: string; title: string; subtitle: string; isDark: boolean }) {
@@ -83,13 +79,25 @@ export default function ProfileScreen() {
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [avatarBroken, setAvatarBroken] = useState(false);
 
+  const [profileEmail, setProfileEmail] = useState('');
+  const [hasPassword, setHasPassword] = useState(true);
+  const [currentPassForProfile, setCurrentPassForProfile] = useState('');
+  const [showCurrentPassForProfile, setShowCurrentPassForProfile] = useState(false);
+
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
   const [showNewPass, setShowNewPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
 
+  const [supportSubject, setSupportSubject] = useState('');
+  const [supportProblemType, setSupportProblemType] = useState('routes');
   const [supportMessage, setSupportMessage] = useState('');
-  const [supportPriority, setSupportPriority] = useState<'low' | 'medium' | 'high'>('low');
+  const [submittingTicket, setSubmittingTicket] = useState(false);
+  const [expandedFaq, setExpandedFaq] = useState<string | null>(null);
+  const [myTickets, setMyTickets] = useState<any[]>([]);
+  const [loadingTickets, setLoadingTickets] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -97,14 +105,23 @@ export default function ProfileScreen() {
       const user = data.user ?? data;
       setFullName(`${user.firstName ?? ''} ${user.lastName ?? ''}`.trim());
       setPhone(user.phoneNumber ?? '');
+      setProfileEmail(user.email ?? '');
+      if (user.hasPassword !== undefined) {
+        setHasPassword(user.hasPassword);
+      }
+      // Foto desde el backend (base64 data URI)
+      if (user.profilePhotoUrl) {
+        setAvatarUri(user.profilePhotoUrl);
+        await SecureStore.setItemAsync(avatarKeyFor(auth.userId), user.profilePhotoUrl);
+      }
     } catch {}
-  }, []);
+  }, [auth.userId]);
 
   useEffect(() => {
     fetchProfile();
-    // Foto guardada de antes (si no carga, se muestra el icono por defecto).
-    SecureStore.getItemAsync(AVATAR_STORE_KEY)
-      .then(u => u && setAvatarUri(u))
+    // Fallback: foto local si el backend no tiene una
+    SecureStore.getItemAsync(avatarKeyFor(auth.userId))
+      .then(u => { if (u) setAvatarUri(prev => prev ?? u); })
       .catch(() => {});
   }, [fetchProfile]);
 
@@ -117,25 +134,36 @@ export default function ProfileScreen() {
       }
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        quality: 0.7,
+        quality: 0.5,
       });
       if (res.canceled || !res.assets?.[0]?.uri) return;
 
-      // Copia la foto a la memoria de la app para que no se pierda al reiniciar.
-      let saved = res.assets[0].uri;
-      try {
-        const FS: any = await import('expo-file-system/legacy');
-        const dest = `${FS.documentDirectory}avatar.jpg`;
-        await FS.deleteAsync(dest, { idempotent: true });
-        await FS.copyAsync({ from: saved, to: dest });
-        saved = dest;
-      } catch (fsErr: any) {
-        console.warn('[profile] no se pudo copiar la foto:', fsErr?.message);
-      }
+      const pickedUri = res.assets[0].uri;
+      if (!pickedUri) return;
 
-      setAvatarUri(saved);
+      // Convertir a base64
+      const FS: any = await import('expo-file-system/legacy');
+      const base64 = await FS.readAsStringAsync(pickedUri, {
+        encoding: FS.EncodingType.Base64,
+      });
+      const dataUri = `data:image/jpeg;base64,${base64}`;
+
+      // Subir al backend
+      await apiClient.put('/api/users/me/photo', { photoBase64: dataUri });
+
+      // Guardar localmente tambien (fallback offline)
+      let saved = pickedUri;
+      try {
+        const filename = `avatar_${Date.now()}.jpg`;
+        const dest = `${FS.documentDirectory}${filename}`;
+        await FS.copyAsync({ from: pickedUri, to: dest });
+        saved = dest;
+      } catch {}
+
       setAvatarBroken(false);
-      await SecureStore.setItemAsync(AVATAR_STORE_KEY, saved);
+      setAvatarUri(saved);
+      await SecureStore.setItemAsync(avatarKeyFor(auth.userId), saved);
+      Dialog.alert(t('profile.feedback.savedTitle'), 'Foto de perfil actualizada correctamente.', { tone: 'success' });
     } catch (e: any) {
       console.warn('[profile] picker error:', e?.message);
       Dialog.alert(t('auth.errorTitle'), t('profile.feedback.error'), { tone: 'error' });
@@ -144,16 +172,30 @@ export default function ProfileScreen() {
 
   const handleSavePersonal = async () => {
     try {
-      const parts = fullName.trim().split(' ');
+      const parts = fullName.trim().split(/\s+/);
       const firstName = parts[0] || '';
-      const lastName = parts.slice(1).join(' ');
-      await apiClient.put('/api/auth/me', {
+      const lastName = parts.slice(1).join(' ') || '';
+
+      if (hasPassword && !currentPassForProfile) {
+        Dialog.alert(
+          t('auth.errorTitle'),
+          'Por favor ingresa tu contraseña actual para confirmar la actualización de tus datos personales.',
+          { tone: 'warning' }
+        );
+        return;
+      }
+
+      await apiClient.put('/api/users/me', {
         firstName,
         lastName,
-        phoneNumber: phone || undefined,
+        email: profileEmail || auth.email,
+        phoneNumber: phone || null,
+        currentPassword: currentPassForProfile || null,
       });
+
       // Propaga el nombre nuevo al contexto: el saludo del inicio se actualiza al instante.
       setAuth({ ...auth, firstName });
+      setCurrentPassForProfile('');
       Dialog.alert(t('profile.feedback.savedTitle'), t('profile.feedback.savedMsg'));
     } catch (err: any) {
       Dialog.alert(
@@ -164,15 +206,24 @@ export default function ProfileScreen() {
   };
 
   const handleChangePassword = async () => {
+    if (!hasPassword) {
+      Dialog.alert('Cuenta vinculada a Google', 'Tu cuenta está vinculada a Google. Administra tu contraseña y seguridad directamente en Google.', { tone: 'info' });
+      return;
+    }
+    if (!currentPassword) {
+      Dialog.alert(t('auth.errorTitle'), 'Por favor ingresa tu contraseña actual.', { tone: 'error' });
+      return;
+    }
     if (!newPass || newPass !== confirmPass || newPass.length < 8) {
       Dialog.alert(t('auth.errorTitle'), t('profile.feedback.invalidPass'), { tone: 'error' });
       return;
     }
     try {
       await apiClient.post('/api/auth/change-password', {
-        currentPassword: '',
+        currentPassword,
         newPassword: newPass,
       });
+      setCurrentPassword('');
       setNewPass('');
       setConfirmPass('');
       Dialog.alert(t('profile.feedback.passTitle'), t('profile.feedback.passMsg'));
@@ -184,19 +235,117 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleSendSupport = () => {
-    // RF30 soporte técnico
-    if (!supportMessage.trim()) {
+  const PROBLEM_TYPES = [
+    { id: 'routes', label: 'Problema con rutas o visualización en mapa' },
+    { id: 'profile', label: 'Error en mi cuenta, contraseña o datos de perfil' },
+    { id: 'general', label: 'Incidencia o falla técnica general' },
+    { id: 'suggestion', label: 'Sugerencia de mejora o felicitación' },
+    { id: 'other', label: 'Otro problema' },
+  ];
+
+  const TYPE_LABEL_MAP: Record<string, string> = {
+    routes: 'Problema con rutas o mapa',
+    profile: 'Error en mi cuenta o perfil',
+    general: 'Incidencia técnica general',
+    suggestion: 'Sugerencia o felicitación',
+    other: 'Otro problema',
+  };
+
+  const FAQ_ITEMS = [
+    {
+      id: 'rutas',
+      q: '¿Cómo consultar mis rutas?',
+      a: "Puedes acceder a tus rutas planificadas desde la opción 'Mis Rutas' en el panel principal. Si deseas guardar una ruta para consultarla frecuentemente, presiona el ícono de corazón ❤️ para enviarla a tu lista de Favoritos.",
+    },
+    {
+      id: 'perfil',
+      q: '¿Cómo actualizar mi perfil?',
+      a: "En esta misma sección de 'Mi Perfil', ve a la pestaña 'Información Personal' y presiona el botón 'Editar Perfil'. Podrás actualizar tu nombre, número de teléfono, foto y biografía.",
+    },
+    {
+      id: 'error',
+      q: '¿Qué hago si ocurre un error?',
+      a: 'Si el mapa no carga o experimentas lentitud, intenta reiniciar la app. Si el error persiste al calcular una ruta o iniciar sesión, completa el formulario de soporte detallando lo sucedido.',
+    },
+    {
+      id: 'co2',
+      q: '¿Cómo se calcula el ahorro de CO₂?',
+      a: 'Al planificar una ruta a pie o en bici, nuestro algoritmo ambiental calcula la distancia y la compara contra las emisiones que generaría un vehículo particular a combustión (aprox. 170 gramos de CO₂ por kilómetro recorrido). Así puedes visualizar tu impacto ambiental positivo.',
+    },
+  ];
+
+  const loadMyTickets = useCallback(async () => {
+    setLoadingTickets(true);
+    try {
+      const { data } = await apiClient.get('/api/support/tickets');
+      setMyTickets(Array.isArray(data) ? data : data?.items ?? []);
+    } catch (e) {
+      console.warn('[support] error cargando tickets:', e);
+    } finally {
+      setLoadingTickets(false);
+    }
+  }, []);
+
+  const handleSendSupport = async () => {
+    if (!supportSubject.trim() || !supportMessage.trim()) {
       Dialog.alert(t('auth.errorTitle'), t('profile.feedback.emptyMessage'), { tone: 'error' });
       return;
     }
-    setSupportMessage('');
-    Dialog.alert(t('profile.feedback.supportTitle'), t('profile.feedback.supportMsg'));
+    setSubmittingTicket(true);
+    try {
+      const typeLabel = TYPE_LABEL_MAP[supportProblemType] || 'General';
+      const formattedMessage = `[Tipo de problema: ${typeLabel}]\n\n${supportMessage.trim()}`;
+      await apiClient.post('/api/support/tickets', {
+        subject: supportSubject.trim(),
+        message: formattedMessage,
+        priority: 2,
+      });
+      setSupportSubject('');
+      setSupportMessage('');
+      setSupportProblemType('routes');
+      Dialog.alert(t('profile.feedback.supportTitle'), t('profile.feedback.supportMsg'));
+      await loadMyTickets();
+    } catch (err: any) {
+      Dialog.alert(
+        t('auth.errorTitle'),
+        err?.response?.data?.detail || err?.response?.data?.message || t('profile.feedback.error'),
+        { tone: 'error' }
+      );
+    } finally {
+      setSubmittingTicket(false);
+    }
   };
 
-  const handleExportData = (format: 'pdf' | 'excel') => {
-    // RF22/RF29 exportación de datos
-    console.log('Exportar datos', { format });
+  const handleExportData = async (format: 'pdf' | 'excel') => {
+    try {
+      const Sharing = await import('expo-sharing');
+      const FileSystem = await import('expo-file-system/legacy');
+      // El backend acepta csv, json, xlsx. PDF lo generamos como csv descargable.
+      const backendFormat = format === 'pdf' ? 'csv' : 'xlsx';
+      const { data, headers } = await apiClient.get(`/api/exports/trips?format=${backendFormat}`, {
+        responseType: 'arraybuffer',
+      });
+      const ext = backendFormat === 'xlsx' ? 'xlsx' : 'csv';
+      const mimeType = backendFormat === 'xlsx'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'text/csv';
+      const fileName = `ecoruteando-datos.${ext}`;
+      const fileUri = FileSystem.cacheDirectory + fileName;
+      // data es un ArrayBuffer; lo convertimos a base64 para FileSystem
+      const bytes = new Uint8Array(data);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const base64 = btoa(binary);
+      await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, { mimeType, dialogTitle: 'Exportar mis datos' });
+      } else {
+        Dialog.alert(t('profile.account.export'), `Archivo guardado en: ${fileUri}`);
+      }
+    } catch (e: any) {
+      console.warn('[export]', e);
+      Dialog.alert(t('auth.errorTitle'), e?.response?.data?.detail || e?.message || 'No se pudo exportar', { tone: 'error' });
+    }
   };
 
   const handleLogout = async () => {
@@ -206,6 +355,31 @@ export default function ProfileScreen() {
 
   const handleDeleteAccount = () => {
     // RF6 eliminación de cuenta
+    Dialog.alert(
+      t('profile.account.deleteTitle'),
+      t('profile.account.deleteText'),
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: t('profile.account.deleteButton'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiClient.delete('/api/users/me');
+              await signOut();
+              router.replace('/(auth)/login');
+            } catch (err: any) {
+              Dialog.alert(
+                t('auth.errorTitle'),
+                err?.response?.data?.detail || err?.response?.data?.message || t('profile.feedback.error'),
+                { tone: 'error' }
+              );
+            }
+          },
+        },
+      ],
+      { tone: 'warning', icon: 'trash' }
+    );
   };
 
   const inputBoxDark = isDark && s.inputDark;
@@ -433,6 +607,25 @@ export default function ProfileScreen() {
                   />
                 </View>
 
+                {hasPassword && (
+                  <View style={s.block}>
+                    <Text style={s.fieldLabel}>{t('profile.personal.fields.currentPassword')}</Text>
+                    <View style={[s.inputWrap, isDark && s.inputWrapDark]}>
+                      <TextInput
+                        value={currentPassForProfile}
+                        onChangeText={setCurrentPassForProfile}
+                        placeholder="********"
+                        placeholderTextColor="#9ca3af"
+                        secureTextEntry={!showCurrentPassForProfile}
+                        style={[s.inputInline, isDark && { color: '#e2e8f0' }]}
+                      />
+                      <TouchableOpacity onPress={() => setShowCurrentPassForProfile(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name={showCurrentPassForProfile ? 'eye-off-outline' : 'eye-outline'} size={18} color={isDark ? '#94a3b8' : '#6b7280'} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
                 <TouchableOpacity style={[s.primaryBtn, isDark && s.primaryBtnDark]} onPress={handleSavePersonal}>
                   <Ionicons name="checkmark-circle-outline" size={18} color={isDark ? '#06281c' : '#fff'} />
                   <Text style={[s.primaryBtnText, isDark && s.primaryBtnTextDark]}>
@@ -529,107 +722,270 @@ export default function ProfileScreen() {
                 </Text>
               </View>
 
-              <View style={s.block}>
-                <Text style={s.fieldLabel}>{t('profile.security.newPassword')}</Text>
-                <View style={[s.inputWrap, isDark && s.inputWrapDark]}>
-                  <TextInput
-                    value={newPass}
-                    onChangeText={setNewPass}
-                    placeholder="********"
-                    placeholderTextColor="#9ca3af"
-                    secureTextEntry={!showNewPass}
-                    style={[s.inputInline, isDark && { color: '#e2e8f0' }]}
-                  />
-                  <TouchableOpacity onPress={() => setShowNewPass(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name={showNewPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={isDark ? '#94a3b8' : '#6b7280'} />
+              {hasPassword ? (
+                <>
+                  <View style={s.block}>
+                    <Text style={s.fieldLabel}>{t('profile.security.currentPassword')}</Text>
+                    <View style={[s.inputWrap, isDark && s.inputWrapDark]}>
+                      <TextInput
+                        value={currentPassword}
+                        onChangeText={setCurrentPassword}
+                        placeholder="********"
+                        placeholderTextColor="#9ca3af"
+                        secureTextEntry={!showCurrentPass}
+                        style={[s.inputInline, isDark && { color: '#e2e8f0' }]}
+                      />
+                      <TouchableOpacity onPress={() => setShowCurrentPass(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name={showCurrentPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={isDark ? '#94a3b8' : '#6b7280'} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={s.block}>
+                    <Text style={s.fieldLabel}>{t('profile.security.newPassword')}</Text>
+                    <View style={[s.inputWrap, isDark && s.inputWrapDark]}>
+                      <TextInput
+                        value={newPass}
+                        onChangeText={setNewPass}
+                        placeholder="********"
+                        placeholderTextColor="#9ca3af"
+                        secureTextEntry={!showNewPass}
+                        style={[s.inputInline, isDark && { color: '#e2e8f0' }]}
+                      />
+                      <TouchableOpacity onPress={() => setShowNewPass(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name={showNewPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={isDark ? '#94a3b8' : '#6b7280'} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={s.block}>
+                    <Text style={s.fieldLabel}>{t('profile.security.confirmPassword')}</Text>
+                    <View style={[s.inputWrap, isDark && s.inputWrapDark]}>
+                      <TextInput
+                        value={confirmPass}
+                        onChangeText={setConfirmPass}
+                        placeholder="********"
+                        placeholderTextColor="#9ca3af"
+                        secureTextEntry={!showConfirmPass}
+                        style={[s.inputInline, isDark && { color: '#e2e8f0' }]}
+                      />
+                      <TouchableOpacity onPress={() => setShowConfirmPass(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name={showConfirmPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={isDark ? '#94a3b8' : '#6b7280'} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={s.hintRow}>
+                    <Ionicons name="information-circle-outline" size={14} color={isDark ? '#94a3b8' : '#6b7280'} />
+                    <Text style={[s.hintText, isDark && { color: '#94a3b8' }]}>{t('profile.security.hint')}</Text>
+                  </View>
+
+                  <TouchableOpacity style={[s.primaryBtn, isDark && s.primaryBtnDark]} onPress={handleChangePassword}>
+                    <Ionicons name="lock-closed-outline" size={17} color={isDark ? '#06281c' : '#fff'} />
+                    <Text style={[s.primaryBtnText, isDark && s.primaryBtnTextDark]}>
+                      {t('profile.security.button')}
+                    </Text>
                   </TouchableOpacity>
+                </>
+              ) : (
+                <View style={{
+                  padding: 16,
+                  borderRadius: 16,
+                  backgroundColor: isDark ? 'rgba(59, 130, 246, 0.1)' : '#eff6ff',
+                  borderColor: isDark ? 'rgba(59, 130, 246, 0.25)' : '#bfdbfe',
+                  borderWidth: 1,
+                  marginTop: 14,
+                  alignItems: 'center',
+                }}>
+                  <View style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: '#fff',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 10,
+                    shadowColor: '#000',
+                    shadowOpacity: 0.08,
+                    shadowRadius: 4,
+                    elevation: 2,
+                  }}>
+                    <Ionicons name="logo-google" size={24} color="#4285F4" />
+                  </View>
+                  <Text style={{
+                    fontWeight: '800',
+                    fontSize: 14,
+                    color: isDark ? '#93c5fd' : '#1e40af',
+                    marginBottom: 6,
+                    textAlign: 'center',
+                  }}>
+                    Cuenta vinculada a Google
+                  </Text>
+                  <Text style={{
+                    fontSize: 12,
+                    lineHeight: 18,
+                    color: isDark ? '#cbd5e1' : '#475569',
+                    textAlign: 'center',
+                  }}>
+                    Iniciaste sesión mediante Google. Tu contraseña y autenticación son gestionadas de forma centralizada y segura por Google, por lo que no es posible ni necesario cambiarla en EcoRuteando.
+                  </Text>
                 </View>
-              </View>
-
-              <View style={s.block}>
-                <Text style={s.fieldLabel}>{t('profile.security.confirmPassword')}</Text>
-                <View style={[s.inputWrap, isDark && s.inputWrapDark]}>
-                  <TextInput
-                    value={confirmPass}
-                    onChangeText={setConfirmPass}
-                    placeholder="********"
-                    placeholderTextColor="#9ca3af"
-                    secureTextEntry={!showConfirmPass}
-                    style={[s.inputInline, isDark && { color: '#e2e8f0' }]}
-                  />
-                  <TouchableOpacity onPress={() => setShowConfirmPass(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name={showConfirmPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={isDark ? '#94a3b8' : '#6b7280'} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={s.hintRow}>
-                <Ionicons name="information-circle-outline" size={14} color={isDark ? '#94a3b8' : '#6b7280'} />
-                <Text style={[s.hintText, isDark && { color: '#94a3b8' }]}>{t('profile.security.hint')}</Text>
-              </View>
-
-              <TouchableOpacity style={[s.primaryBtn, isDark && s.primaryBtnDark]} onPress={handleChangePassword}>
-                <Ionicons name="lock-closed-outline" size={17} color={isDark ? '#06281c' : '#fff'} />
-                <Text style={[s.primaryBtnText, isDark && s.primaryBtnTextDark]}>
-                  {t('profile.security.button')}
-                </Text>
-              </TouchableOpacity>
+              )}
             </View>
           )}
 
           {/* ===================== PESTAÑA 3 · SOPORTE ===================== */}
           {activeTab === 'support' && (
-            <View style={[s.card, isDark && s.cardDark]}>
-              <CardHeader
-                icon="chatbubbles-outline"
-                color="#a855f7"
-                title={t('profile.support.title')}
-                subtitle={t('profile.support.subtitle')}
-                isDark={isDark}
-              />
-
-              <Text style={s.fieldLabel}>{t('profile.support.priority')}</Text>
-              <View style={s.chipRow}>
-                {PRIORITY_OPTIONS.map(option => {
-                  const active = supportPriority === option.id;
+            <>
+              {/* 1. Centro de Ayuda — Preguntas Frecuentes */}
+              <View style={[s.card, isDark && s.cardDark]}>
+                <CardHeader
+                  icon="bulb-outline"
+                  color="#f59e0b"
+                  title={'Centro de Ayuda y Preguntas Frecuentes'}
+                  subtitle="Respuestas inmediatas a las consultas más comunes"
+                  isDark={isDark}
+                />
+                {FAQ_ITEMS.map(faq => {
+                  const isOpen = expandedFaq === faq.id;
                   return (
                     <TouchableOpacity
-                      key={option.id}
-                      style={[s.chip, isDark && s.chipDark, active && s.chipActive]}
-                      onPress={() => setSupportPriority(option.id as any)}
+                      key={faq.id}
+                      style={[s.faqItem, isDark && s.faqItemDark, isOpen && (isDark ? s.faqItemOpenDark : s.faqItemOpen)]}
+                      onPress={() => setExpandedFaq(isOpen ? null : faq.id)}
+                      activeOpacity={0.7}
                     >
-                      <Text style={[s.chipText, isDark && s.chipTextDark, active && s.chipTextActive]}>
-                        {t(option.labelKey)}
-                      </Text>
+                      <View style={s.faqHeader}>
+                        <Text style={[s.faqQ, isDark && { color: '#e2e8f0' }, isOpen && { color: '#10b981' }]}>{faq.q}</Text>
+                        <Ionicons
+                          name={isOpen ? 'chevron-up' : 'chevron-down'}
+                          size={16}
+                          color={isOpen ? '#10b981' : isDark ? '#94a3b8' : '#6b7280'}
+                        />
+                      </View>
+                      {isOpen && (
+                        <Text style={[s.faqA, isDark && { color: '#cbd5e1' }]}>{faq.a}</Text>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
               </View>
 
-              <View style={s.block}>
-                <Text style={s.fieldLabel}>{t('profile.support.message')}</Text>
-                <TextInput
-                  value={supportMessage}
-                  onChangeText={setSupportMessage}
-                  placeholder={t('profile.support.placeholder')}
-                  placeholderTextColor="#9ca3af"
-                  multiline
-                  style={[s.textArea, isDark && s.textAreaDark]}
+              {/* 2. Formulario de Soporte Técnico */}
+              <View style={[s.card, isDark && s.cardDark]}>
+                <CardHeader
+                  icon="chatbubbles-outline"
+                  color="#a855f7"
+                  title={'Formulario de Soporte Técnico'}
+                  subtitle="Completa los campos para registrar tu solicitud"
+                  isDark={isDark}
                 />
+
+                <View style={s.block}>
+                  <Text style={s.fieldLabel}>Asunto de la solicitud *</Text>
+                  <TextInput
+                    value={supportSubject}
+                    onChangeText={setSupportSubject}
+                    placeholder="Ej: Inconveniente calculando ruta en el centro..."
+                    placeholderTextColor="#9ca3af"
+                    style={[s.input, isDark && s.inputDark]}
+                  />
+                </View>
+
+                <View style={s.block}>
+                  <Text style={s.fieldLabel}>Tipo de problema *</Text>
+                  <View style={s.chipRow}>
+                    {PROBLEM_TYPES.map(pt => {
+                      const active = supportProblemType === pt.id;
+                      return (
+                        <TouchableOpacity
+                          key={pt.id}
+                          style={[s.chip, isDark && s.chipDark, active && s.chipActive]}
+                          onPress={() => setSupportProblemType(pt.id)}
+                        >
+                          <Text style={[s.chipText, isDark && s.chipTextDark, active && s.chipTextActive, { fontSize: 11 }]}>
+                            {pt.id === 'routes' ? 'Rutas' : pt.id === 'profile' ? 'Cuenta' : pt.id === 'general' ? 'General' : pt.id === 'suggestion' ? 'Sugerencia' : 'Otro'}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={s.block}>
+                  <Text style={s.fieldLabel}>Descripción de la solicitud *</Text>
+                  <TextInput
+                    value={supportMessage}
+                    onChangeText={setSupportMessage}
+                    placeholder="Describe con claridad los pasos que realizaste y lo que sucedió..."
+                    placeholderTextColor="#9ca3af"
+                    multiline
+                    style={[s.textArea, isDark && s.textAreaDark]}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={[s.primaryBtn, isDark && s.primaryBtnDark, submittingTicket && { opacity: 0.5 }]}
+                  onPress={handleSendSupport}
+                  disabled={submittingTicket}
+                >
+                  <Ionicons name="send-outline" size={17} color={isDark ? '#06281c' : '#fff'} />
+                  <Text style={[s.primaryBtnText, isDark && s.primaryBtnTextDark]}>
+                    {submittingTicket ? 'Enviando solicitud...' : t('profile.support.button')}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
-              <TouchableOpacity style={[s.primaryBtn, isDark && s.primaryBtnDark]} onPress={handleSendSupport}>
-                <Ionicons name="send-outline" size={17} color={isDark ? '#06281c' : '#fff'} />
-                <Text style={[s.primaryBtnText, isDark && s.primaryBtnTextDark]}>
-                  {t('profile.support.button')}
-                </Text>
-              </TouchableOpacity>
+              {/* 3. Mis Solicitudes Enviadas */}
+              <View style={[s.card, isDark && s.cardDark]}>
+                <View style={s.ticketsHeader}>
+                  <CardHeader
+                    icon="document-text-outline"
+                    color="#06b6d4"
+                    title={'Mis Solicitudes Enviadas'}
+                    subtitle="Seguimiento del estado de tus solicitudes"
+                    isDark={isDark}
+                  />
+                  <TouchableOpacity onPress={loadMyTickets} disabled={loadingTickets}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#10b981' }}>
+                      {loadingTickets ? 'Actualizando...' : 'Refrescar'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
-              <View style={s.hintRow}>
-                <Ionicons name="information-circle-outline" size={14} color={isDark ? '#94a3b8' : '#6b7280'} />
-                <Text style={[s.hintText, isDark && { color: '#94a3b8' }]}>{t('profile.support.hint')}</Text>
+                {loadingTickets ? (
+                  <ActivityIndicator size="small" color="#10b981" style={{ marginVertical: 20 }} />
+                ) : myTickets.length === 0 ? (
+                  <View style={s.emptyBox}>
+                    <Ionicons name="document-text-outline" size={32} color={isDark ? '#475569' : '#9ca3af'} />
+                    <Text style={[s.emptyTitle, isDark && { color: '#cbd5e1' }]}>
+                      No tienes solicitudes de soporte registradas
+                    </Text>
+                    <Text style={[s.emptySub, isDark && { color: '#64748b' }]}>
+                      Las solicitudes que envíes aparecerán aquí con su estado
+                    </Text>
+                  </View>
+                ) : (
+                  myTickets.map((ticket, idx) => (
+                    <View key={ticket.id ?? idx} style={[s.ticketItem, isDark && s.ticketItemDark]}>
+                      <View style={s.ticketRow}>
+                        <Text style={[s.ticketSubject, isDark && { color: '#e2e8f0' }]} numberOfLines={1}>
+                          {ticket.subject}
+                        </Text>
+                        <View style={[s.ticketBadge, { backgroundColor: ticket.status === 'resolved' || ticket.status === 'closed' ? '#dcfce7' : ticket.status === 'in_progress' ? '#fef3c7' : '#fee2e2' }]}>
+                          <Text style={{ fontSize: 10, fontWeight: '700', color: ticket.status === 'resolved' || ticket.status === 'closed' ? '#166534' : ticket.status === 'in_progress' ? '#92400e' : '#991b1b' }}>
+                            {ticket.status === 'resolved' || ticket.status === 'closed' ? 'Resuelta' : ticket.status === 'in_progress' ? 'En proceso' : 'Pendiente'}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[s.ticketDate, isDark && { color: '#64748b' }]}>
+                        {ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : ''}
+                      </Text>
+                    </View>
+                  ))
+                )}
               </View>
-            </View>
+            </>
           )}
 
           {/* Footer — idéntico al Dashboard */}
@@ -839,6 +1195,29 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: '#fee2e2',
   },
   dangerCardDark: { backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.28)' },
+
+  // FAQ
+  faqItem: { backgroundColor: '#f9fafb', borderRadius: 14, borderWidth: 1, borderColor: '#e5e7eb', overflow: 'hidden', marginBottom: 8 },
+  faqItemDark: { backgroundColor: 'rgba(17,28,32,0.6)', borderColor: '#26383D' },
+  faqItemOpen: { backgroundColor: 'rgba(16,185,129,0.05)', borderColor: '#a7f3d0' },
+  faqItemOpenDark: { backgroundColor: '#111C20', borderColor: 'rgba(16,185,129,0.35)' },
+  faqHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14 },
+  faqQ: { fontSize: 13, fontWeight: '700', color: '#1f2937', flex: 1, marginRight: 8 },
+  faqA: { fontSize: 12, lineHeight: 19, color: '#4b5563', paddingHorizontal: 14, paddingBottom: 14, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.06)', paddingTop: 10 },
+
+  // Tickets
+  ticketsHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  ticketItem: { backgroundColor: '#f9fafb', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', padding: 12, marginBottom: 8 },
+  ticketItemDark: { backgroundColor: 'rgba(17,28,32,0.5)', borderColor: '#26383D' },
+  ticketRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  ticketSubject: { fontSize: 13, fontWeight: '600', color: '#1f2937', flex: 1 },
+  ticketBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  ticketDate: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
+
+  // Empty state
+  emptyBox: { alignItems: 'center', paddingVertical: 28, gap: 6 },
+  emptyTitle: { fontSize: 13, fontWeight: '700', color: '#374151' },
+  emptySub: { fontSize: 11, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 20 },
   dangerBtn: {
     flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center',
     backgroundColor: '#ef4444', borderRadius: 12, paddingVertical: 11, marginTop: 4,

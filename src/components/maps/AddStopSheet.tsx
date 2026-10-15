@@ -33,6 +33,7 @@ interface Props {
   onSelectPlace: (place: NearbyPlace) => void;
   onAddPlace: (place: NearbyPlace) => void;
   onClose: () => void;
+  scrollRef?: any;
 }
 
 function haversineKm(
@@ -63,6 +64,7 @@ export function AddStopSheet({
   onSelectPlace,
   onAddPlace,
   onClose,
+  scrollRef,
 }: Props) {
   const { t } = useLanguage();
   const [query, setQuery] = useState('');
@@ -243,6 +245,7 @@ export function AddStopSheet({
         </View>
       ) : (
         <ScrollView
+          ref={scrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.cardsRow}

@@ -558,7 +558,7 @@ export default {
     confirmNewPasswordLabel: 'Confirm new password',
     resetPasswordButton: 'Reset password',
     verifyCodeTitle: 'Verify your account',
-    verifyCodeSubtitle: 'Enter the 4-digit code we sent to your email.',
+    verifyCodeSubtitle: 'Enter the 6-digit code we sent to your email.',
     confirmCodeButton: 'Confirm code',
     resendCode: 'Resend code',
     fillAllFields: 'Fill in all fields',
@@ -567,9 +567,9 @@ export default {
     tooManyRequests: 'Too many requests. Wait a few minutes.',
     sendCodeError: 'The code could not be sent.',
     fillBothFields: 'Fill in both fields',
-    codeIncomplete: 'Enter the 4 digits of the code',
+    codeIncomplete: 'Enter the 6 digits of the code',
     codeInvalid: 'Invalid code',
-    resendError: 'Error resending the code',
+    resendError: 'Could not resend code. If your account is already verified, please log in.',
     registerInvalidForm: 'Please fill in all fields correctly',
     emailAlreadyRegistered: 'This email is already registered.',
     alreadyRegisteredTitle: 'You are already registered',
@@ -726,6 +726,7 @@ export default {
         gender: 'Gender (optional)',
         transport: 'Main transport mode',
         bio: 'Bio',
+        currentPassword: 'Current password (to confirm changes)',
       },
 
       placeholders: {
@@ -775,6 +776,7 @@ export default {
       subtitle: 'Update your password and secure your account.',
 
       email: 'Email',
+      currentPassword: 'Current password',
       newPassword: 'New password',
       confirmPassword: 'Confirm password',
 
@@ -949,9 +951,14 @@ export default {
   savedRoutes: {
     title: 'My routes',
     back: 'Back',
-    subtitle: 'Routes you saved',
+    subtitle: 'Routes you saved and your favorites',
     refreshNote: 'Refreshes every time you open this screen',
     listTitle: 'Your routes',
+    allRoutesTab: 'All My Routes',
+    favoritesTab: 'Favorites',
+    useRoute: 'Use Route',
+    emptyFavorites: 'No favorite routes yet',
+    emptyFavoritesSub: 'Tap the heart icon on any route to save it to favorites',
     retry: 'Try again',
     countLabel: 'Saved',
     distanceLabel: 'Total distance',

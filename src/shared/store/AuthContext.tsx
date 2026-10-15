@@ -112,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await SecureStore.deleteItemAsync('accessToken');
     await SecureStore.deleteItemAsync('refreshToken');
     await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+    await SecureStore.deleteItemAsync('profileAvatarUri');
     setAuth({ email: null, role: null, userId: null, firstName: null });
   };
 
@@ -122,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await SecureStore.deleteItemAsync('accessToken');
     await SecureStore.deleteItemAsync('refreshToken');
     await SecureStore.deleteItemAsync('userId');
+    await SecureStore.deleteItemAsync('profileAvatarUri');
 
     const authData: AuthState = {
       email: null,

@@ -142,7 +142,6 @@
           }}
           contentContainerStyle={{
             paddingBottom: spacing.xl,
-            paddingTop: 80,
           }}
           showsVerticalScrollIndicator={false}
         >
@@ -155,7 +154,7 @@
             }
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={s.heroWrapper}
+            style={[s.heroWrapper, { paddingTop: 88 }]}
           >
             <View style={s.bubbleOne} />
             <View style={s.bubbleTwo} />
@@ -200,8 +199,8 @@
               { backgroundColor: isDark ? '#021811' : '#f9f6f0' },
             ]}
           >
-            <Text style={s.sectionTitle}> {t('landing.mobilityTitle')}</Text>
-            <Text style={s.sectionSubtitle}>
+            <Text style={[s.sectionTitle, isDark && { color: '#e2f3e8' }]}> {t('landing.mobilityTitle')}</Text>
+            <Text style={[s.sectionSubtitle, isDark && { color: '#9ab5a5' }]}>
                 {t('landing.mobilityDesc')}
             </Text>
 
@@ -233,7 +232,7 @@
               { backgroundColor: isDark ? '#020c09' : '#ffffff' },
             ]}
           >
-            <Text style={s.sectionTitle}>  {t('landing.whyTitle')}</Text>
+            <Text style={[s.sectionTitle, isDark && { color: '#e2f3e8' }]}>  {t('landing.whyTitle')}</Text>
 
             <View style={{ marginTop: spacing.md }}>
             <WhyItem
@@ -250,12 +249,12 @@
             </View>
 
             <View style={s.whyGraphicWrapper}>
-              <View style={s.whyCircle}>
+              <View style={[s.whyCircle, isDark && { backgroundColor: '#0d2b1f' }]}>
                 <Ionicons name="leaf-outline" size={40} color="#166534" />
               </View>
-              <View style={[s.badge, { top: -10, right: 0 }]}>
-                <Text style={s.badgeNumber}>34+</Text>
-                <Text style={s.badgeText}>{t('landing.routes')}</Text>
+              <View style={[s.badge, { top: -10, right: 0 }, isDark && { backgroundColor: '#0d2b1f' }]}>
+                <Text style={[s.badgeNumber, isDark && { color: '#34d399' }]}>34+</Text>
+                <Text style={[s.badgeText, isDark && { color: '#9ab5a5' }]}>{t('landing.routes')}</Text>
               </View>
             </View>
           </View>

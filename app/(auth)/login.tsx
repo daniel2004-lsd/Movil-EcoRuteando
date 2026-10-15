@@ -83,8 +83,9 @@ export default function LoginScreen() {
     if (password.length < 8) { setError(t('auth.passwordMin8Error')); return; }
     setLoading(true);
     try {
-      const { data } = await apiClient.post('/api/auth/login', { email: email.trim(), password });
+      const { data } = await apiClient.post('/api/auth/login', { email: email.trim(), password: password.trim() });
       if (data.requiresTwoFactor) { router.push('/(auth)/verify-code'); return; }
+      if (data.requiresEmailVerification) { router.push('/(auth)/verify-code'); return; }
       await signIn({ accessToken: data.accessToken, refreshToken: data.refreshToken, email: email.trim() });
       router.replace('/(tabs)');
     } catch (err:any) {
