@@ -33,7 +33,7 @@ export default function VerifyCodeScreen() {
   // email que viene desde el registro: /verify-code?email=algo@mail.com
   const { email } = useLocalSearchParams<{ email?: string }>();
 
-  const [code, setCode] = useState(['', '', '', '']);
+  const [code, setCode] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,14 +62,20 @@ export default function VerifyCodeScreen() {
     next[index] = value.slice(-1);
     setCode(next);
 
-    if (value && index < 3) {
+    if (value && index < 5) {
       inputs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleKeyPress = (e: any, index: number) => {
+    if (e.nativeEvent.key === 'Backspace' && !code[index] && index > 0) {
+      inputs.current[index - 1]?.focus();
     }
   };
 
   const handleVerify = async () => {
     const joined = code.join('');
-    if (joined.length < 4) {
+    if (joined.length < 6) {
       setError(t('auth.codeIncomplete'));
       return;
     }
@@ -89,18 +95,23 @@ export default function VerifyCodeScreen() {
 
       router.replace('/(tabs)');
     } catch (err: any) {
-      setError(err?.message || t('auth.codeInvalid'));
+      setError(err?.response?.data?.detail || err?.response?.data?.message || err?.message || t('auth.codeInvalid'));
     } finally {
       setLoading(false);
     }
   };
 
   const handleResend = async () => {
+    if (!email) {
+      setError('No se identificó el correo electrónico. Puedes volver al registro o iniciar sesión.');
+      return;
+    }
     try {
-      await apiClient.post('/api/auth/send-verification', { email });
+      await apiClient.post('/api/auth/send-verification', { email: String(email).trim() });
       setError(null);
-    } catch {
-      setError(t('auth.resendError'));
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.response?.data?.message;
+      setError(msg || t('auth.resendError'));
     }
   };
 
@@ -178,6 +189,7 @@ export default function VerifyCodeScreen() {
                   maxLength={1}
                   value={v}
                   onChangeText={value => handleChange(value, i)}
+                  onKeyPress={e => handleKeyPress(e, i)}
                   textAlign="center"
                 />
               ))}
@@ -202,6 +214,18 @@ export default function VerifyCodeScreen() {
                 color={colors.ecoMain}
               />
               <Text style={s.resendText}>{t('auth.resendCode')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={s.backRow}
+              onPress={() => router.replace('/(auth)/login')}
+            >
+              <Ionicons
+                name="log-in-outline"
+                size={18}
+                color={colors.ecoMain}
+              />
+              <Text style={[s.backText, { color: colors.ecoMain, fontWeight: '600' }]}>{t('auth.loginButton')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -283,13 +307,13 @@ const s = StyleSheet.create({
   },
   codeRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
+    justifyContent: 'center',
+    gap: 6,
   },
   codeInput: {
-    width: 52,
-    height: 56,
-    borderRadius: 16,
+    width: 44,
+    height: 52,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e5e7eb',
     backgroundColor: '#f9fafb',

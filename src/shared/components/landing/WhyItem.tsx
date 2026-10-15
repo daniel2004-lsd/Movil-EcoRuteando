@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing } from '../../theme';
+import { useThemeMode } from '../../store/ThemeContext';
 
 type Props = {
   icon: any;
@@ -12,6 +13,8 @@ type Props = {
 
 export function WhyItem({ icon, title, desc }: Props) {
   const [pressed, setPressed] = useState(false);
+  const { theme } = useThemeMode();
+  const isDark = theme === 'dark';
 
   return (
     <TouchableOpacity
@@ -20,15 +23,16 @@ export function WhyItem({ icon, title, desc }: Props) {
       onPressOut={() => setPressed(false)}
       style={[
         styles.whyItem,
+        isDark && styles.whyItemDark,
         pressed && { transform: [{ translateY: -2 }], elevation: 4 },
       ]}
     >
-      <View style={styles.whyIcon}>
+      <View style={[styles.whyIcon, isDark && styles.whyIconDark]}>
         <Ionicons name={icon} size={18} color={colors.ecoMain} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.whyTitle}>{title}</Text>
-        <Text style={styles.whyDesc}>{desc}</Text>
+        <Text style={[styles.whyTitle, isDark && styles.whyTitleDark]}>{title}</Text>
+        <Text style={[styles.whyDesc, isDark && styles.whyDescDark]}>{desc}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -45,6 +49,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
+  whyItemDark: {
+    backgroundColor: '#0d2b1f',
+    borderColor: '#1a3a2a',
+  },
   whyIcon: {
     width: 32,
     height: 32,
@@ -53,15 +61,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  whyIconDark: {
+    backgroundColor: '#132e20',
+  },
   whyTitle: {
     fontFamily: fonts.serifBold,
     fontSize: 13,
     color: colors.ecoDark,
+  },
+  whyTitleDark: {
+    color: '#e2f3e8',
   },
   whyDesc: {
     fontFamily: fonts.serif,
     fontSize: 12,
     color: colors.textMuted,
     lineHeight: 18,
+  },
+  whyDescDark: {
+    color: '#9ab5a5',
   },
 });
