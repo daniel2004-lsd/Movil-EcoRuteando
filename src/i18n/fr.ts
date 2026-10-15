@@ -557,7 +557,7 @@ export default {
         confirmNewPasswordLabel: 'Confirmer le nouveau mot de passe',
         resetPasswordButton: 'Réinitialiser le mot de passe',
         verifyCodeTitle: 'Vérifiez votre compte',
-        verifyCodeSubtitle: 'Saisissez le code à 4 chiffres que nous avons envoyé à votre e-mail.',
+        verifyCodeSubtitle: 'Saisissez le code à 6 chiffres que nous avons envoyé à votre e-mail.',
         confirmCodeButton: 'Confirmer le code',
         resendCode: 'Renvoyer le code',
         fillAllFields: 'Remplissez tous les champs',
@@ -566,9 +566,9 @@ export default {
         tooManyRequests: 'Trop de requêtes. Attendez quelques minutes.',
         sendCodeError: 'Impossible d’envoyer le code.',
         fillBothFields: 'Remplissez les deux champs',
-        codeIncomplete: 'Saisissez les 4 chiffres du code',
+        codeIncomplete: 'Saisissez les 6 chiffres du code',
         codeInvalid: 'Code invalide',
-        resendError: 'Erreur lors du renvoi du code',
+        resendError: 'Impossible de renvoyer le code. Si votre compte est déjà vérifié, connectez-vous.',
         registerInvalidForm: 'Veuillez remplir tous les champs correctement',
         emailAlreadyRegistered: 'Cet e-mail est déjà enregistré.',
         alreadyRegisteredTitle: 'Vous êtes déjà inscrit',
@@ -726,6 +726,7 @@ export default {
         gender: 'Genre (optionnel)',
         transport: 'Moyen de transport principal',
         bio: 'Biographie',
+        currentPassword: 'Mot de passe actuel (pour confirmer)',
       },
 
       placeholders: {
@@ -775,6 +776,7 @@ export default {
       subtitle: 'Mettez à jour votre mot de passe et sécurisez votre compte.',
 
       email: 'E-mail',
+      currentPassword: 'Mot de passe actuel',
       newPassword: 'Nouveau mot de passe',
       confirmPassword: 'Confirmer le mot de passe',
 
@@ -950,9 +952,14 @@ export default {
   savedRoutes: {
     title: 'Mes itinéraires',
     back: 'Retour',
-    subtitle: 'Itinéraires enregistrés',
+    subtitle: 'Itinéraires enregistrés et favoris',
     refreshNote: 'Se met à jour à chaque ouverture',
     listTitle: 'Vos itinéraires',
+    allRoutesTab: 'Tous mes itinéraires',
+    favoritesTab: 'Favoris',
+    useRoute: 'Utiliser l’itinéraire',
+    emptyFavorites: 'Aucun itinéraire favori pour l’instant',
+    emptyFavoritesSub: 'Touchez le cœur sur n’importe quel itinéraire pour l’ajouter aux favoris',
     retry: 'Réessayer',
     countLabel: 'Enregistrés',
     distanceLabel: 'Distance totale',

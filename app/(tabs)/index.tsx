@@ -1,19 +1,19 @@
 // app/(tabs)/index.tsx — igual que web UserDashboard.jsx
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useAuth } from '../../src/shared/store/AuthContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 import apiClient from '../../src/shared/services/apiClient';
+import * as SecureStore from '../../src/shared/services/keyStorage';
 import { Dialog } from '../../src/shared/components/ui/AppDialog';
 
 const MODULES = [
   { id:'plan_ruta', icon:'map', titleKey:'home.modPlan', subKey:'home.modPlanSub', colors:['#10b981','#059669'] },
-  { id:'mis_rutas', icon:'route', titleKey:'home.modRoutes', subKey:'home.modRoutesSub', colors:['#06b6d4','#0284c7'] },
+  { id:'mis_rutas', icon:'navigate', titleKey:'home.modRoutes', subKey:'home.modRoutesSub', colors:['#06b6d4','#0284c7'] },
   { id:'historial', icon:'time', titleKey:'home.modHistory', subKey:'home.modHistorySub', colors:['#a855f7','#7c3aed'] },
-  { id:'favoritos', icon:'heart', titleKey:'home.modFavs', subKey:'home.modFavsSub', colors:['#f43f5e','#ef4444'] },
   { id:'perfil', icon:'person', titleKey:'home.modProfile', subKey:'home.modProfileSub', colors:['#14b8a6','#0891b2'] },
   { id:'alertas', icon:'warning', titleKey:'home.modAlerts', subKey:'home.modAlertsSub', colors:['#f59e0b','#ea580c'] },
 ];
@@ -26,9 +26,10 @@ export default function HomeScreen() {
   const isDark = theme === 'dark';
   const isGuest = !!auth.guest;
 
-  // El saludo toma SIEMPRE el nombre del perfil (/api/auth/me):
+  // El saludo toma SIEMPRE el nombre del perfil (/api/auth/me) y la foto de perfil:
   // si se edita en Perfil, al volver aquí queda actualizado.
   const [profileName, setProfileName] = useState('');
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   useFocusEffect(useCallback(() => {
     let active = true;
     (async () => {
@@ -37,6 +38,19 @@ export default function HomeScreen() {
         const u = data?.user ?? data;
         const full = `${u?.firstName ?? ''} ${u?.lastName ?? ''}`.trim();
         if (active) setProfileName(full);
+        // Foto desde el backend (base64 data URI)
+        if (active) {
+          if (u?.profilePhotoUrl) {
+            setAvatarUri(u.profilePhotoUrl);
+            const key = auth.userId ? `profileAvatarUri_${auth.userId}` : 'profileAvatarUri';
+            SecureStore.setItemAsync(key, u.profilePhotoUrl).catch(() => {});
+          } else {
+            // Fallback: foto local
+            const key = auth.userId ? `profileAvatarUri_${auth.userId}` : 'profileAvatarUri';
+            const uri = await SecureStore.getItemAsync(key);
+            setAvatarUri(uri ?? null);
+          }
+        }
       } catch {}
     })();
     return () => { active = false; };
@@ -94,16 +108,46 @@ export default function HomeScreen() {
           <View style={s.logoBox}><Ionicons name="leaf" size={20} color="#fff" /></View>
           <Text style={[s.headerTitle, isDark&&{color:'#e2e8f0'}]}>{t('common.appName')}</Text>
         </View>
-        <TouchableOpacity onPress={async()=>{await signOut(); router.replace('/(auth)/login');}} style={[s.logoutBtn, isDark&&{backgroundColor:'#162329',borderColor:'#26383D'}]}>
-          <Ionicons name="log-out-outline" size={16} color={isDark?'#e2e8f0':'#4b5563'} />
-          <Text style={[s.logoutText, isDark&&{color:'#e2e8f0'}]}>{t('home.logoutShort')}</Text>
-        </TouchableOpacity>
+
+        <View style={s.headerRight}>
+          {!isGuest && (
+            <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={s.avatarHeaderBtn} activeOpacity={0.8}>
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={s.headerAvatar} />
+              ) : (
+                <View style={[s.headerAvatarPlaceholder, isDark && { backgroundColor: '#1e293b' }]}>
+                  <Ionicons name="person" size={16} color={isDark ? '#34d399' : '#059669'} />
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity onPress={async()=>{await signOut(); router.replace('/(auth)/login');}} style={[s.logoutBtn, isDark&&{backgroundColor:'#162329',borderColor:'#26383D'}]}>
+            <Ionicons name="log-out-outline" size={16} color={isDark?'#e2e8f0':'#4b5563'} />
+            <Text style={[s.logoutText, isDark&&{color:'#e2e8f0'}]}>{t('home.logoutShort')}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={s.scroll}>
         <View style={[s.greetingCard, isDark&&s.greetingCardDark]}>
-          <Text style={[s.greetingTitle, isDark&&{color:'#e2e8f0'}]}>{t('home.hello')}, {userName} 👋</Text>
-          <Text style={[s.greetingSub, isDark&&{color:'#94a3b8'}]}>{t('home.greetingSub')}</Text>
+          <View style={s.greetingRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.greetingTitle, isDark&&{color:'#e2e8f0'}]}>{t('home.hello')}, {userName} 👋</Text>
+              <Text style={[s.greetingSub, isDark&&{color:'#94a3b8'}]}>{t('home.greetingSub')}</Text>
+            </View>
+            {!isGuest && (
+              <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} activeOpacity={0.85} style={s.greetingAvatarWrap}>
+                {avatarUri ? (
+                  <Image source={{ uri: avatarUri }} style={s.greetingAvatar} />
+                ) : (
+                  <View style={[s.greetingAvatarPlaceholder, isDark && { backgroundColor: '#1e293b' }]}>
+                    <Ionicons name="person" size={24} color={isDark ? '#34d399' : '#059669'} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={s.statsGrid}>
             <View style={[s.statCard, isDark&&s.statCardDark]}>
               <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(16,185,129,0.2)'}]}><Ionicons name="leaf" size={20} color={isDark?'#34D399':'#fff'} /></View>
@@ -120,11 +164,18 @@ export default function HomeScreen() {
               <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>{timeShown}</Text>
               <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statTime')}</Text>
             </View>
-            <View style={[s.statCard, isDark&&s.statCardDark]}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                if (isGuest) return Dialog.alert(t('planRoute.needAccountTitle'), t('planRoute.needAccountMsg').replace('{action}', t('savedRoutes.favoritesTab')), [{ text: t('planRoute.notNow'), style: 'cancel' }, { text: t('auth.loginButton'), onPress: () => router.push('/(auth)/login') }], { tone: 'info', icon: 'person-circle' });
+                router.push({ pathname: '/(tabs)/saved-routes', params: { tab: 'favorites' } });
+              }}
+              style={[s.statCard, isDark&&s.statCardDark]}
+            >
               <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(244,63,94,0.2)'}]}><Ionicons name="heart" size={20} color={isDark?'#fb7185':'#fff'} /></View>
               <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>{favsShown}</Text>
               <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statFavs')}</Text>
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -148,7 +199,6 @@ export default function HomeScreen() {
               if(m.id==='plan_ruta') router.push('/(tabs)/plan-route');
               else if(m.id==='mis_rutas') { if(isGuest) return needAccount(t('savedRoutes.title')); router.push('/(tabs)/saved-routes'); }
               else if(m.id==='historial') { if(isGuest) return needAccount(t('tabs.history')); router.push('/(tabs)/history'); }
-              else if(m.id==='favoritos') { if(isGuest) return needAccount(t('tabs.favorites')); router.push('/(tabs)/favorites'); }
               else if(m.id==='perfil') { if(isGuest) return needAccount(t('tabs.profile')); router.push('/(tabs)/profile'); }
               else if(m.id==='alertas') { if(isGuest) return needAccount(t('alerts.title')); router.push('/(tabs)/alerts'); }
               else router.push('/(tabs)/plan-route');
@@ -177,9 +227,13 @@ export default function HomeScreen() {
 const s = StyleSheet.create({
   page:{flex:1,backgroundColor:'#f0fdf4'},
   pageDark:{backgroundColor:'#0B1215'},
-  header:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:16,paddingVertical:12,backgroundColor:'rgba(255,255,255,0.95)',borderBottomWidth:1,borderBottomColor:'#f3f4f6'},
+  header:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:16,paddingTop:Platform.OS==='android'?42:16,paddingBottom:12,backgroundColor:'rgba(255,255,255,0.95)',borderBottomWidth:1,borderBottomColor:'#f3f4f6'},
   headerDark:{backgroundColor:'rgba(22,35,41,0.95)',borderBottomColor:'#26383D'},
   headerLeft:{flexDirection:'row',alignItems:'center',gap:8},
+  headerRight:{flexDirection:'row',alignItems:'center',gap:10},
+  avatarHeaderBtn:{width:36,height:36,borderRadius:18,overflow:'hidden',borderWidth:2,borderColor:'#10b981'},
+  headerAvatar:{width:'100%',height:'100%'},
+  headerAvatarPlaceholder:{width:'100%',height:'100%',backgroundColor:'#dcfce7',alignItems:'center',justifyContent:'center'},
   logoBox:{width:40,height:40,borderRadius:12,backgroundColor:'#10b981',alignItems:'center',justifyContent:'center'},
   logoIcon:{fontSize:20,color:'#fff'},
   headerTitle:{fontSize:18,fontWeight:'800',color:'#1f2937'},
@@ -188,6 +242,10 @@ const s = StyleSheet.create({
   scroll:{padding:16,paddingBottom:32},
   greetingCard:{backgroundColor:'#fff',borderRadius:24,padding:20,borderWidth:1,borderColor:'#dcfce7',shadowColor:'#000',shadowOpacity:0.06,shadowRadius:12,shadowOffset:{width:0,height:4},elevation:2},
   greetingCardDark:{backgroundColor:'#162329',borderColor:'#26383D'},
+  greetingRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
+  greetingAvatarWrap:{width:52,height:52,borderRadius:26,overflow:'hidden',borderWidth:2.5,borderColor:'#10b981'},
+  greetingAvatar:{width:'100%',height:'100%'},
+  greetingAvatarPlaceholder:{width:'100%',height:'100%',backgroundColor:'#dcfce7',alignItems:'center',justifyContent:'center'},
   greetingTitle:{fontSize:22,fontWeight:'800',color:'#1f2937'},
   greetingSub:{fontSize:12,color:'#6b7280',marginTop:4},
   statsGrid:{flexDirection:'row',flexWrap:'wrap',gap:12,marginTop:16},

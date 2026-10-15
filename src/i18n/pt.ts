@@ -558,7 +558,7 @@ export default {
         confirmNewPasswordLabel: 'Confirmar nova senha',
         resetPasswordButton: 'Redefinir senha',
         verifyCodeTitle: 'Verifique sua conta',
-        verifyCodeSubtitle: 'Insira o código de 4 dígitos que enviamos para o seu e-mail.',
+        verifyCodeSubtitle: 'Insira o código de 6 dígitos que enviamos para o seu e-mail.',
         confirmCodeButton: 'Confirmar código',
         resendCode: 'Reenviar código',
         fillAllFields: 'Preencha todos os campos',
@@ -567,9 +567,9 @@ export default {
         tooManyRequests: 'Muitas solicitações. Aguarde alguns minutos.',
         sendCodeError: 'Não foi possível enviar o código.',
         fillBothFields: 'Preencha os dois campos',
-        codeIncomplete: 'Preencha os 4 dígitos do código',
+        codeIncomplete: 'Preencha os 6 dígitos do código',
         codeInvalid: 'Código inválido',
-        resendError: 'Erro ao reenviar o código',
+        resendError: 'Não foi possível reenviar o código. Se sua conta já foi verificada, faça login.',
         registerInvalidForm: 'Preencha todos os campos corretamente',
         emailAlreadyRegistered: 'Este e-mail já está cadastrado.',
         alreadyRegisteredTitle: 'Você já está cadastrado',
@@ -727,6 +727,7 @@ export default {
         gender: 'Gênero (opcional)',
         transport: 'Principal meio de transporte',
         bio: 'Biografia',
+        currentPassword: 'Senha atual (para confirmar)',
       },
 
       placeholders: {
@@ -776,6 +777,7 @@ export default {
       subtitle: 'Atualize sua senha e proteja sua conta.',
 
       email: 'E-mail',
+      currentPassword: 'Senha atual',
       newPassword: 'Nova senha',
       confirmPassword: 'Confirmar senha',
 
@@ -950,9 +952,14 @@ export default {
   savedRoutes: {
     title: 'Minhas rotas',
     back: 'Voltar',
-    subtitle: 'Rotas que você salvou',
+    subtitle: 'Rotas que você salvou e suas favoritas',
     refreshNote: 'Atualiza sempre que você abre aqui',
     listTitle: 'Suas rotas',
+    allRoutesTab: 'Todas as minhas rotas',
+    favoritesTab: 'Favoritas',
+    useRoute: 'Usar rota',
+    emptyFavorites: 'Ainda não tem rotas favoritas',
+    emptyFavoritesSub: 'Toque no coração de qualquer rota para marcá-la como favorita',
     retry: 'Tentar de novo',
     countLabel: 'Salvas',
     distanceLabel: 'Distância total',

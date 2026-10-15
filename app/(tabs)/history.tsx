@@ -87,8 +87,69 @@ export default function HistoryScreen() {
 
   const totalCo2 = trips.reduce((sum, t) => sum + (t.co2SavedKg ?? 0), 0);
 
-  const handleExportPDF = () => console.log('Exportar historial a PDF');
-  const handleExportExcel = () => console.log('Exportar historial a Excel');
+  const buildHtmlTable = () => {
+    const rows = trips.map(trip => `
+      <tr>
+        <td>${trip.originAddress}</td>
+        <td>${trip.destinationAddress}</td>
+        <td>${modeLabel(trip.transportMode)}</td>
+        <td>${(trip.distanceMeters / 1000).toFixed(2)} km</td>
+        <td>${trip.co2SavedKg.toFixed(3)} kg</td>
+        <td>${fmtDate(trip.startedAt)}</td>
+      </tr>`).join('');
+    return `
+      <html><head><meta charset="utf-8"><style>
+        body { font-family: Arial, sans-serif; padding: 24px; }
+        h1 { color: #16a34a; font-size: 22px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th { background: #16a34a; color: #fff; padding: 10px 8px; text-align: left; font-size: 12px; }
+        td { padding: 8px; border-bottom: 1px solid #e5e7eb; font-size: 12px; }
+        tr:nth-child(even) { background: #f9fafb; }
+        .summary { margin-top: 12px; font-size: 14px; color: #374151; }
+      </style></head><body>
+        <h1>🌿 EcoRuteando — Historial de Viajes</h1>
+        <p class="summary">Total de viajes: <strong>${trips.length}</strong> &nbsp;|&nbsp; CO₂ ahorrado total: <strong>${totalCo2.toFixed(3)} kg</strong></p>
+        <table>
+          <thead><tr><th>Origen</th><th>Destino</th><th>Transporte</th><th>Distancia</th><th>CO₂</th><th>Fecha</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </body></html>`;
+  };
+
+  const handleExportPDF = async () => {
+    if (trips.length === 0) return;
+    try {
+      const Print = await import('expo-print');
+      const Sharing = await import('expo-sharing');
+      const html = buildHtmlTable();
+      const { uri } = await Print.printToFileAsync({ html });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Exportar historial' });
+      }
+    } catch (e) {
+      console.warn('[export PDF]', e);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (trips.length === 0) return;
+    try {
+      const Sharing = await import('expo-sharing');
+      const FileSystem = await import('expo-file-system/legacy');
+      const header = 'Origen,Destino,Transporte,Distancia (km),CO2 (kg),Fecha';
+      const csvRows = trips.map(trip =>
+        `"${trip.originAddress}","${trip.destinationAddress}","${modeLabel(trip.transportMode)}",${(trip.distanceMeters / 1000).toFixed(2)},${trip.co2SavedKg.toFixed(3)},"${fmtDate(trip.startedAt)}"`
+      );
+      const csv = [header, ...csvRows].join('\n');
+      const csvUri = FileSystem.cacheDirectory + 'historial-ecoruteando.csv';
+      await FileSystem.writeAsStringAsync(csvUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(csvUri, { mimeType: 'text/csv', dialogTitle: 'Exportar historial' });
+      }
+    } catch (e) {
+      console.warn('[export Excel]', e);
+    }
+  };
 
   const modeLabel = (mode: string) => t(`savedRoutes.transport.${mode}`);
   const fmtDate = (iso: string) => {
