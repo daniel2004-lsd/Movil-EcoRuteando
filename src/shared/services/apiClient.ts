@@ -35,8 +35,17 @@ apiClient.interceptors.response.use(
   response => response,
   async error => {
     const originalRequest = error.config;
+    const url = originalRequest?.url || '';
+    const isAuthEndpoint =
+      url.includes('/api/auth/login') ||
+      url.includes('/api/auth/register') ||
+      url.includes('/api/auth/refresh') ||
+      url.includes('/api/auth/forgot-password') ||
+      url.includes('/api/auth/reset-password') ||
+      url.includes('/api/auth/send-verification') ||
+      url.includes('/api/auth/verify-email');
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {
         return new Promise<string>((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -51,7 +60,7 @@ apiClient.interceptors.response.use(
 
       try {
         const refreshToken = await SecureStore.getItemAsync('refreshToken');
-        if (!refreshToken) throw new Error('No refresh token');
+        if (!refreshToken) throw new Error('No has iniciado sesión o tu sesión ha expirado.');
 
         const { data } = await axios.post(`${API_BASE}/api/auth/refresh`, {
           refreshToken,
@@ -67,6 +76,7 @@ apiClient.interceptors.response.use(
         processQueue(refreshError, null);
         await SecureStore.deleteItemAsync('accessToken');
         await SecureStore.deleteItemAsync('refreshToken');
+        await SecureStore.deleteItemAsync('profileAvatarUri');
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

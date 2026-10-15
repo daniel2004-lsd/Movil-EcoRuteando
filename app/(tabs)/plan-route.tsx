@@ -159,6 +159,10 @@ export default function PlanRouteScreen() {
   const completeTripFlowRef = useRef<() => void>(() => {});
   const voiceOnRef = useRef(true);
   const preAlertRef = useRef<Set<number>>(new Set());
+  // Distancia real acumulada (m) y timestamp de inicio del viaje activo.
+  const traveledDistMRef = useRef(0);
+  const lastTrackPosRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const tripStartedAtRef = useRef<number | null>(null);
   const reportRefreshTimer = useRef<any>(null);
 
   useEffect(() => {
@@ -495,6 +499,15 @@ export default function PlanRouteScreen() {
   // del backend en response.data (detail / message / errors). Sin esto, la
   // regla CU03 (ruta duplicada por nombre) nunca se detectaba y el guardado fallaba.
   const apiErrorMessage = (e: any): string => {
+    const raw = String(e?.message ?? '');
+    if (
+      raw.includes('refresh token') ||
+      raw.includes('iniciado sesión') ||
+      raw.includes('sesión ha expirado') ||
+      e?.response?.status === 401
+    ) {
+      return 'Debes iniciar sesión para realizar esta acción.';
+    }
     const d = e?.response?.data;
     if (d) {
       if (typeof d.detail === 'string' && d.detail) return d.detail;
@@ -506,7 +519,7 @@ export default function PlanRouteScreen() {
         if (first) return String(first);
       }
     }
-    return String(e?.message ?? '');
+    return raw;
   };
 
   // Regla CU03: si la ruta ya existe por nombre, se reusa en vez de fallar.
@@ -573,6 +586,9 @@ export default function PlanRouteScreen() {
       setArrived(false);
       lastRecenterRef.current = null;
       preAlertRef.current.clear();
+      traveledDistMRef.current = 0;
+      lastTrackPosRef.current = null;
+      tripStartedAtRef.current = Date.now();
       const firstStep = route?.steps?.[0];
       speak(t('planRoute.navStartedSpeak').replace('{name}', d.name) + (firstStep?.instruction ? ' ' + firstStep.instruction : ''));
       console.log('[VIAJE] iniciado id=', started.id, 'steps=', route?.steps?.length ?? 0);
@@ -589,18 +605,44 @@ export default function PlanRouteScreen() {
     setCompleting(true);
     setTripError(null);
     try {
-      const { distanceKm, durationMin } = routeMetrics();
+      // Usar distancia/tiempo REAL del tracking; si no hay tracking (viaje
+      // sin GPS), caer al plan completo como fallback.
+      const realDistKm = traveledDistMRef.current / 1000;
+      const realDurMin = tripStartedAtRef.current
+        ? Math.max(1, Math.round((Date.now() - tripStartedAtRef.current) / 60000))
+        : 0;
+      const useReal = realDistKm >= 0.05; // ≥ 50 m de tracking confiable
+      const { distanceKm: planKm, durationMin: planMin } = routeMetrics();
+      const finalDistKm = useReal ? Number(realDistKm.toFixed(2)) : planKm;
+      const finalDurMin = useReal ? realDurMin : planMin;
+
+      // CO2 proporcional a la distancia real vs planificada.
+      let finalCo2: number | null = null;
+      if (estimate?.co2SavedKg != null && route?.distance?.value) {
+        const planM = route.distance.value;
+        const ratio = planM > 0 ? Math.min(traveledDistMRef.current / planM, 1) : 1;
+        finalCo2 = Number((estimate.co2SavedKg * ratio).toFixed(4));
+      } else if (estimate?.co2EmissionsKg != null && route?.distance?.value) {
+        const planM = route.distance.value;
+        const ratio = planM > 0 ? Math.min(traveledDistMRef.current / planM, 1) : 1;
+        finalCo2 = Number((estimate.co2EmissionsKg * ratio).toFixed(4));
+      }
+
       await completeTrip(activeTripId, {
-        actualDistanceKm: distanceKm,
-        actualDurationMin: durationMin,
-        actualCo2Kg: estimate?.co2SavedKg ?? null,
+        actualDistanceKm: finalDistKm,
+        actualDurationMin: finalDurMin,
+        actualCo2Kg: finalCo2,
       });
+      console.log('[VIAJE] completado | realDist=', realDistKm.toFixed(2), 'km | durMin=', finalDurMin, '| co2=', finalCo2, '| useReal=', useReal);
       setActiveTripId(null);
       stepIndexRef.current = 0;
       setCurrentStepIndex(0);
       arrivedRef.current = false;
       setArrived(false);
       lastRecenterRef.current = null;
+      traveledDistMRef.current = 0;
+      lastTrackPosRef.current = null;
+      tripStartedAtRef.current = null;
       Speech.stop();
       Dialog.alert(
         t('planRoute.tripCompletedTitle'),
@@ -659,6 +701,19 @@ export default function PlanRouteScreen() {
       name: t('planRoute.myLocation'),
     };
     setUserPos(p);
+
+    // Acumular distancia real recorrida mientras el viaje está activo.
+    if (activeTripId) {
+      const last = lastTrackPosRef.current;
+      if (last) {
+        const d = haversineM(p, last);
+        // Ignorar saltos GPS > 500 m (ruido) para no inflar la distancia.
+        if (d > 0 && d < 500) {
+          traveledDistMRef.current += d;
+        }
+      }
+      lastTrackPosRef.current = { latitude: p.latitude, longitude: p.longitude };
+    }
 
     const steps = routeRef.current?.steps || [];
     const idx = stepIndexRef.current;
@@ -817,7 +872,7 @@ export default function PlanRouteScreen() {
     try {
       const center =
         centerOverride ?? { latitude: region.latitude, longitude: region.longitude };
-      const places = await getNearbyPlaces(center, category.placeType);
+      const places = await getNearbyPlaces(center, category.placeType, 5000);
       setPoiPlaces(places);
       console.log('[POI]', category.id, '→', places.length, 'lugares');
     } finally {
@@ -949,7 +1004,11 @@ export default function PlanRouteScreen() {
       }
     } catch (e: any) {
       const msg = apiErrorMessage(e);
-      Dialog.alert(t('favorites.title'), msg || t('planRoute.unexpectedError'), { tone: 'error' });
+      if (msg.includes('iniciar sesión')) {
+        requireAccount(t('tabs.favorites'));
+      } else {
+        Dialog.alert(t('favorites.title'), msg || t('planRoute.unexpectedError'), { tone: 'error' });
+      }
     }
   };
 
@@ -978,7 +1037,11 @@ export default function PlanRouteScreen() {
     } catch (e: any) {
       const msg = apiErrorMessage(e);
       console.log('[RUTA] guardar ERROR:', msg || e?.message);
-      Dialog.alert(t('planRoute.saveError'), msg || t('planRoute.unexpectedError'), { tone: 'error' });
+      if (msg.includes('iniciar sesión')) {
+        requireAccount(t('planRoute.actionSave'));
+      } else {
+        Dialog.alert(t('planRoute.saveError'), msg || t('planRoute.unexpectedError'), { tone: 'error' });
+      }
     }
   };
 
@@ -1105,6 +1168,7 @@ export default function PlanRouteScreen() {
   const reportSnapPoints = useMemo(() => ['45%'], []);
   const reportFormSnapPoints = useMemo(() => ['80%'], []);
   const addStopSnapPoints = useMemo(() => ['78%'], []);
+  const addStopScrollRef = useRef(null);
 
   const dragPillPan = useMemo(
     () =>
@@ -1495,6 +1559,7 @@ export default function PlanRouteScreen() {
           }}
           enablePanDownToClose
           enableDynamicSizing={false}
+          enableContentPanningGesture={false}
           handleIndicatorStyle={styles.sheetHandle}
           backgroundStyle={styles.sheetBg}
         >
@@ -1510,6 +1575,7 @@ export default function PlanRouteScreen() {
             onSelectPlace={selectPoiPlace}
             onAddPlace={addStop}
             onClose={cancelPickStop}
+            scrollRef={addStopScrollRef}
           />
         </BottomSheet>
       ) : reportSheetOpen ? (

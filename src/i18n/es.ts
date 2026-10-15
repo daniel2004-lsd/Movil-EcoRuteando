@@ -560,7 +560,7 @@ export default {
     confirmNewPasswordLabel: 'Confirmar nueva contraseña',
     resetPasswordButton: 'Restablecer contraseña',
     verifyCodeTitle: 'Verifica tu cuenta',
-    verifyCodeSubtitle: 'Ingresa el código de 4 dígitos que enviamos a tu correo.',
+    verifyCodeSubtitle: 'Ingresa el código de 6 dígitos que enviamos a tu correo.',
     confirmCodeButton: 'Confirmar código',
     resendCode: 'Reenviar código',
     fillAllFields: 'Completa todos los campos',
@@ -569,9 +569,9 @@ export default {
     tooManyRequests: 'Demasiadas solicitudes. Espera unos minutos.',
     sendCodeError: 'No fue posible enviar el código.',
     fillBothFields: 'Completa ambos campos',
-    codeIncomplete: 'Completa los 4 dígitos del código',
+    codeIncomplete: 'Completa los 6 dígitos del código',
     codeInvalid: 'Código inválido',
-    resendError: 'Error al reenviar código',
+    resendError: 'No se pudo reenviar el código. Si tu cuenta ya está verificada, inicia sesión.',
     registerInvalidForm: 'Por favor, completa todos los campos correctamente',
     emailAlreadyRegistered: 'El correo ya está registrado.',
     alreadyRegisteredTitle: 'Ya estás registrado',
@@ -730,6 +730,7 @@ export default {
         gender: 'Género (opcional)',
         transport: 'Medio principal de transporte',
         bio: 'Biografía',
+        currentPassword: 'Contraseña actual (para confirmar cambios)',
       },
 
       placeholders: {
@@ -780,6 +781,7 @@ export default {
         'Actualiza tu contraseña y protege tu acceso según autenticación segura.',
 
       email: 'Correo electrónico',
+      currentPassword: 'Contraseña actual',
       newPassword: 'Nueva contraseña',
       confirmPassword: 'Confirmar contraseña',
 
@@ -954,9 +956,14 @@ export default {
   savedRoutes: {
     title: 'Mis rutas',
     back: 'Volver',
-    subtitle: 'Rutas que guardaste',
+    subtitle: 'Rutas que guardaste y tus favoritas',
     refreshNote: 'Se actualiza cada vez que entras aquí',
     listTitle: 'Tus rutas',
+    allRoutesTab: 'Todas mis rutas',
+    favoritesTab: 'Favoritas',
+    useRoute: 'Usar ruta',
+    emptyFavorites: 'Aún no tienes rutas favoritas',
+    emptyFavoritesSub: 'Toca el icono de corazón en cualquier ruta para marcarla como favorita',
     retry: 'Reintentar',
     countLabel: 'Guardadas',
     distanceLabel: 'Distancia total',

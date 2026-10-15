@@ -25,7 +25,7 @@ export function SearchBar({
   onFocus,
   onClear,
   leftIcon = 'search',
-  rightIcon = 'mic',
+  rightIcon = undefined,
   onRightIconPress,
   autoFocus = false,
   isFocused = false,
@@ -79,9 +79,11 @@ export function SearchBar({
             <Ionicons name="close" size={22} color="#80868b" />
           </TouchableOpacity>
         )}
-        <TouchableOpacity onPress={onRightIconPress} style={styles.voiceBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name={rightIcon as any} size={22} color="#1a73e8" />
-        </TouchableOpacity>
+        {!!rightIcon && (
+          <TouchableOpacity onPress={onRightIconPress} style={styles.voiceBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name={rightIcon as any} size={22} color="#1a73e8" />
+          </TouchableOpacity>
+        )}
       </View>
     </Animated.View>
   );
