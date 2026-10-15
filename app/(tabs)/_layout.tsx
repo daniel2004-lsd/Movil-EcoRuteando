@@ -59,7 +59,7 @@ export default function TabsLayout() {
         name="favorites"
         options={{
           title: t('tabs.favorites'),
-          href: isGuest ? null : undefined,
+          href: null,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="heart" size={size} color={color} />
           ),
@@ -69,11 +69,10 @@ export default function TabsLayout() {
         name="saved-routes"
         options={{
           title: t('savedRoutes.title'),
+          href: isGuest ? null : undefined,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bookmark" size={size} color={color} />
+            <Ionicons name="navigate" size={size} color={color} />
           ),
-          // Oculto en la barra: se llega desde la tarjeta «Mis rutas» del inicio.
-          href: null,
         }}
       />
       <Tabs.Screen

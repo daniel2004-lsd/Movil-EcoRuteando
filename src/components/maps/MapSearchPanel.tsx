@@ -138,7 +138,7 @@ export function MapSearchPanel({
           onClear={onClearDest}
           placeholder={t('map.whereTo')}
           leftIcon="location-outline"
-          rightIcon="mic"
+          
         />
       </View>
 
