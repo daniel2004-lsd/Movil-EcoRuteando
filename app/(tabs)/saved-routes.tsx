@@ -12,6 +12,7 @@ import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 import { useAuth } from '../../src/shared/store/AuthContext';
 import apiClient from '../../src/shared/services/apiClient';
+import { RouteMiniMap } from '../../src/components/maps/RouteMiniMap';
 
 type SavedRoute = {
   id: string;
@@ -27,15 +28,24 @@ type SavedRoute = {
   startLng?: number | null;
   endLat?: number | null;
   endLng?: number | null;
+  encodedPolyline?: string | null;
+  estimatedCalories?: number | null;
   isFavorite?: boolean;
 };
 
-const TRANSPORT_ICON: Record<string, string> = {
-  walking: 'walk-outline',
-  car: 'car-outline',
-  bike: 'bicycle-outline',
-  public_transport: 'bus-outline',
-  mixed: 'git-merge-outline',
+const TRANSPORT_CONFIG: Record<string, { icon: any; label: string; emoji: string }> = {
+  walking: { icon: 'walk-outline', label: 'A pie', emoji: '🚶' },
+  bike: { icon: 'bicycle-outline', label: 'Bicicleta', emoji: '🚲' },
+  car: { icon: 'car-outline', label: 'Automóvil', emoji: '🚗' },
+  public_transport: { icon: 'bus-outline', label: 'Transporte', emoji: '🚌' },
+  mixed: { icon: 'git-merge-outline', label: 'Mixto', emoji: '🔄' },
+};
+
+const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
+  active: { label: 'Activo', bg: '#dcfce7', text: '#059669' },
+  inactive: { label: 'Inactivo', bg: '#f1f5f9', text: '#64748b' },
+  planned: { label: 'Planificada', bg: '#eff6ff', text: '#2563eb' },
+  completed: { label: 'Completada', bg: '#f0fdf4', text: '#16a34a' },
 };
 
 export default function SavedRoutesScreen() {
@@ -66,9 +76,11 @@ export default function SavedRoutesScreen() {
     }
   }, [searchParams.tab]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setLoadError(false);
+  const fetchData = useCallback(async (isSilent = false) => {
+    if (!isSilent) {
+      setLoading(true);
+      setLoadError(false);
+    }
     try {
       const [routesRes, favsRes] = await Promise.all([
         apiClient.get('/api/routes', {
@@ -107,6 +119,8 @@ export default function SavedRoutesScreen() {
             startLng: r.startLongitude ?? r.startLng ?? null,
             endLat: r.endLatitude ?? r.endLat ?? null,
             endLng: r.endLongitude ?? r.endLng ?? null,
+            encodedPolyline: r.encodedPolyline || null,
+            estimatedCalories: r.estimatedCalories != null ? Number(r.estimatedCalories) : null,
             isFavorite: favSet.has(rId),
           };
         });
@@ -132,6 +146,8 @@ export default function SavedRoutesScreen() {
             startLng: f.startLng ?? null,
             endLat: f.endLat ?? null,
             endLng: f.endLng ?? null,
+            encodedPolyline: f.encodedPolyline || null,
+            estimatedCalories: f.estimatedCalories != null ? Number(f.estimatedCalories) : null,
             isFavorite: true,
           });
         }
@@ -139,15 +155,20 @@ export default function SavedRoutesScreen() {
 
       setRoutes(parsedRoutes);
     } catch {
-      setLoadError(true);
+      if (!isSilent) setLoadError(true);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, [t]);
 
   useFocusEffect(
     useCallback(() => {
       fetchData();
+      // Auto-sincronización periódica en segundo plano para reflejar cambios creados en la web
+      const interval = setInterval(() => {
+        fetchData(true);
+      }, 3500);
+      return () => clearInterval(interval);
     }, [fetchData])
   );
 
@@ -512,139 +533,249 @@ export default function SavedRoutesScreen() {
             </View>
           ) : (
             visible.map(route => {
+              const config = TRANSPORT_CONFIG[route.transportType] || TRANSPORT_CONFIG.walking;
               const transportLabel = labelOf(
                 `savedRoutes.transport.${route.transportType}`,
-                route.transportType
+                config.label
               );
-              const showStatus = route.status && route.status !== 'active';
-              const statusLabel = showStatus
-                ? labelOf(`savedRoutes.status.${route.status}`, route.status)
-                : '';
+              const statusKey = (route.status || 'active').toLowerCase();
+              const statusInfo = STATUS_BADGE[statusKey] || {
+                label: route.status || 'Activo',
+                bg: '#ecfdf5',
+                text: '#059669',
+              };
               const isFav = favoriteIds.has(route.id) || !!route.isFavorite;
+
+              // Calorías estimadas (de BD o cálculo estándar por km)
+              const calories =
+                route.estimatedCalories != null
+                  ? Math.round(Number(route.estimatedCalories))
+                  : route.distanceKm != null
+                    ? Math.round(
+                        Number(route.distanceKm) * (route.transportType === 'car' ? 0 : 45)
+                      )
+                    : null;
 
               return (
                 <View key={route.id} style={[s.routeCard, isDark && s.routeCardDark]}>
-                  <View style={s.routeHeader}>
-                    <View style={s.routeNameBlock}>
-                      <View style={s.routeBadgeIcon}>
-                        <Ionicons
-                          name={(TRANSPORT_ICON[route.transportType] as any) || 'walk-outline'}
-                          size={16}
-                          color="#fff"
-                        />
-                      </View>
-                      <Text
-                        style={[s.routeName, isDark && { color: '#e2e8f0' }]}
-                        numberOfLines={2}
-                      >
-                        {route.name}
-                      </Text>
-                    </View>
+                  {/* MINIMAPA SUPERIOR */}
+                  <TouchableOpacity
+                    activeOpacity={0.92}
+                    onPress={() => useRouteInMap(route)}
+                    style={s.mapWrapper}
+                  >
+                    <RouteMiniMap
+                      startLat={route.startLat}
+                      startLng={route.startLng}
+                      endLat={route.endLat}
+                      endLng={route.endLng}
+                      encodedPolyline={route.encodedPolyline}
+                      isDark={isDark}
+                      height={155}
+                    />
 
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <View style={s.transportPill}>
-                        <Text style={s.transportPillText}>{transportLabel}</Text>
+                    {/* Badges superiores sobre el mapa */}
+                    <View style={s.mapOverlayTop} pointerEvents="box-none">
+                      <View style={s.mapOverlayLeftBadges}>
+                        <View
+                          style={[
+                            s.mapStatusBadge,
+                            { backgroundColor: isDark ? 'rgba(16,185,129,0.3)' : statusInfo.bg },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              s.mapStatusBadgeText,
+                              { color: isDark ? '#34d399' : statusInfo.text },
+                            ]}
+                          >
+                            {statusInfo.label}
+                          </Text>
+                        </View>
+                        <View style={s.mapTransportBadge}>
+                          <Text style={s.mapTransportEmoji}>{config.emoji}</Text>
+                          <Text style={s.mapTransportText}>{transportLabel}</Text>
+                        </View>
                       </View>
-                      {/* Botón de favorito interactivo */}
+
+                      {/* Botón flotante de favorito */}
                       <TouchableOpacity
+                        activeOpacity={0.8}
                         onPress={() => toggleFavorite(route)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         disabled={togglingFavId === route.id}
-                        style={[
-                          s.favCircleBtn,
-                          isFav && s.favCircleBtnActive,
-                          isDark && { backgroundColor: isFav ? 'rgba(244,63,94,0.2)' : '#1e293b' },
-                        ]}
+                        style={[s.mapFavBtn, isFav && s.mapFavBtnActive]}
                       >
                         <Ionicons
                           name={isFav ? 'heart' : 'heart-outline'}
-                          size={18}
-                          color={isFav ? '#f43f5e' : isDark ? '#94a3b8' : '#9ca3af'}
+                          size={17}
+                          color="#fff"
                         />
                       </TouchableOpacity>
                     </View>
-                  </View>
 
-                  <View style={s.routeMainRow}>
-                    <View style={s.routeLineCol}>
-                      <View style={s.routeDot} />
-                      <View style={[s.routeLine, isDark && { backgroundColor: '#374151' }]} />
-                      <View style={[s.routeDot, { backgroundColor: '#0f172a' }]} />
-                    </View>
+                    {/* Badges inferiores sobre el mapa */}
+                    <View style={s.mapOverlayBottom} pointerEvents="box-none">
+                      <View style={s.mapExpandHint}>
+                        <Ionicons name="map-outline" size={11} color="#fff" />
+                        <Text style={s.mapExpandHintText}>Ver recorrido</Text>
+                      </View>
 
-                    <View style={s.routeTextCol}>
-                      <Text style={[s.routeLabel, isDark && { color: '#94a3b8' }]}>
-                        {t('savedRoutes.origin')}
-                      </Text>
-                      <Text style={[s.routeValue, isDark && { color: '#e2e8f0' }]}>
-                        {route.startName || route.name}
-                      </Text>
-
-                      <Text style={[s.routeLabel, { marginTop: 6 }, isDark && { color: '#94a3b8' }]}>
-                        {t('savedRoutes.destination')}
-                      </Text>
-                      <Text style={[s.routeValue, isDark && { color: '#e2e8f0' }]}>
-                        {route.destinationName || route.name}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={s.metaRow}>
-                    {route.distanceKm != null && (
-                      <View style={s.chip}>
-                        <Ionicons name="navigate-outline" size={13} color="#065f46" />
-                        <Text style={s.chipText}>
-                          {Number(route.distanceKm).toFixed(1)} {t('savedRoutes.kmSuffix')}
+                      <View style={s.mapMetricsPill}>
+                        <Text style={s.mapMetricsPillText}>
+                          📏 {route.distanceKm != null ? `${Number(route.distanceKm).toFixed(1)} km` : '--'}
+                        </Text>
+                        <Text style={s.mapMetricsPillDivider}>•</Text>
+                        <Text style={s.mapMetricsPillText}>
+                          ⏱️ {route.estimatedTimeMin != null ? `${route.estimatedTimeMin} min` : '--'}
                         </Text>
                       </View>
-                    )}
+                    </View>
+                  </TouchableOpacity>
 
-                    {route.estimatedTimeMin != null && (
-                      <View style={s.chip}>
-                        <Ionicons name="time-outline" size={13} color="#065f46" />
-                        <Text style={s.chipText}>
-                          {route.estimatedTimeMin} {t('savedRoutes.minSuffix')}
-                        </Text>
-                      </View>
-                    )}
+                  {/* CUERPO DE LA TARJETA */}
+                  <View style={s.cardBody}>
+                    <Text
+                      style={[s.routeName, isDark && { color: '#e2e8f0' }]}
+                      numberOfLines={1}
+                    >
+                      {route.name}
+                    </Text>
 
-                    {route.co2SavedKg != null && Number(route.co2SavedKg) > 0 && (
-                      <View style={s.chip}>
-                        <Ionicons name="leaf-outline" size={13} color="#065f46" />
-                        <Text style={s.chipText}>{Number(route.co2SavedKg).toFixed(2)} kg</Text>
-                      </View>
-                    )}
-
-                    {showStatus && (
-                      <View style={s.statusPill}>
-                        <Text style={s.statusText}>{statusLabel}</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  <View style={s.actionsRow}>
+                    {/* Origen y Destino destacados */}
                     <TouchableOpacity
-                      style={[
-                        s.useRouteBtn,
-                        isDark && { backgroundColor: '#064e3b', borderColor: '#059669' },
-                      ]}
+                      activeOpacity={0.85}
                       onPress={() => useRouteInMap(route)}
+                      style={[s.originDestBox, isDark && s.originDestBoxDark]}
                     >
-                      <Ionicons name="map-outline" size={14} color="#059669" />
-                      <Text style={[s.useRouteBtnText, isDark && { color: '#34d399' }]}>
-                        {t('savedRoutes.useRoute')}
-                      </Text>
+                      <View style={s.originDestRow}>
+                        <View style={[s.pointDot, { backgroundColor: '#10b981' }]} />
+                        <View style={s.pointTextCol}>
+                          <Text style={[s.pointTag, { color: isDark ? '#34d399' : '#059669' }]}>
+                            ORIGEN (Partida)
+                          </Text>
+                          <Text
+                            style={[s.pointAddress, isDark && { color: '#e2e8f0' }]}
+                            numberOfLines={1}
+                          >
+                            {route.startName || 'Mi ubicación'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={[s.originDestDivider, isDark && { backgroundColor: '#26383D' }]} />
+
+                      <View style={s.originDestRow}>
+                        <View style={[s.pointDot, { backgroundColor: '#ef4444' }]} />
+                        <View style={s.pointTextCol}>
+                          <Text style={[s.pointTag, { color: isDark ? '#fb7185' : '#e11d48' }]}>
+                            DESTINO (Llegada)
+                          </Text>
+                          <Text
+                            style={[s.pointAddress, isDark && { color: '#e2e8f0' }]}
+                            numberOfLines={1}
+                          >
+                            {route.destinationName || 'Destino seleccionado'}
+                          </Text>
+                        </View>
+                      </View>
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={[s.deleteBtn, isDark && { backgroundColor: '#3f1d1d', borderColor: '#7f1d1d' }]}
-                      onPress={() => askDelete(route)}
-                    >
-                      <Ionicons name="trash-outline" size={14} color="#b91c1c" />
-                      <Text style={[s.deleteBtnText, isDark && { color: '#fca5a5' }]}>
-                        {t('savedRoutes.delete')}
-                      </Text>
-                    </TouchableOpacity>
+                    {/* Grilla de Métricas Enriquecidas 2x2 */}
+                    <View style={s.metricsGrid}>
+                      <View style={[s.metricBox, isDark && s.metricBoxDark]}>
+                        <Text style={s.metricIcon}>📏</Text>
+                        <View style={s.metricContent}>
+                          <Text style={[s.metricLabel, isDark && { color: '#94a3b8' }]}>
+                            {t('savedRoutes.distanceLabel')}
+                          </Text>
+                          <Text style={[s.metricVal, isDark && { color: '#e2e8f0' }]}>
+                            {route.distanceKm != null ? `${Number(route.distanceKm).toFixed(1)} km` : '--'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={[s.metricBox, isDark && s.metricBoxDark]}>
+                        <Text style={s.metricIcon}>⏱️</Text>
+                        <View style={s.metricContent}>
+                          <Text style={[s.metricLabel, isDark && { color: '#94a3b8' }]}>
+                            Tiempo
+                          </Text>
+                          <Text style={[s.metricVal, isDark && { color: '#e2e8f0' }]}>
+                            {route.estimatedTimeMin != null ? `${route.estimatedTimeMin} min` : '--'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={[s.metricBox, s.metricBoxEco, isDark && s.metricBoxEcoDark]}>
+                        <Text style={s.metricIcon}>🌱</Text>
+                        <View style={s.metricContent}>
+                          <Text style={[s.metricLabel, { color: isDark ? '#34d399' : '#059669' }]}>
+                            CO₂ Ahorrado
+                          </Text>
+                          <Text style={[s.metricVal, { color: isDark ? '#34d399' : '#059669' }]}>
+                            {route.co2SavedKg != null ? `${Number(route.co2SavedKg).toFixed(2)} kg` : '0.00 kg'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={[s.metricBox, s.metricBoxCal, isDark && s.metricBoxCalDark]}>
+                        <Text style={s.metricIcon}>🔥</Text>
+                        <View style={s.metricContent}>
+                          <Text style={[s.metricLabel, { color: isDark ? '#fb923c' : '#ea580c' }]}>
+                            Calorías
+                          </Text>
+                          <Text style={[s.metricVal, { color: isDark ? '#fb923c' : '#ea580c' }]}>
+                            {calories != null ? `${calories} kcal` : '--'}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Acciones principales */}
+                    <View style={s.actionsRow}>
+                      <TouchableOpacity
+                        style={s.useRouteBtn}
+                        onPress={() => useRouteInMap(route)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="navigate" size={15} color="#fff" />
+                        <Text style={s.useRouteBtnText}>
+                          {t('savedRoutes.useRoute')}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          s.mapBtn,
+                          isDark && {
+                            backgroundColor: 'rgba(16,185,129,0.15)',
+                            borderColor: 'rgba(16,185,129,0.35)',
+                          },
+                        ]}
+                        onPress={() => useRouteInMap(route)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="map-outline" size={15} color="#10b981" />
+                        <Text style={[s.mapBtnText, isDark && { color: '#34d399' }]}>
+                          Mapa
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          s.deleteBtn,
+                          isDark && {
+                            backgroundColor: 'rgba(239,68,68,0.15)',
+                            borderColor: 'rgba(239,68,68,0.3)',
+                          },
+                        ]}
+                        onPress={() => askDelete(route)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               );
@@ -788,112 +919,288 @@ const s = StyleSheet.create({
 
   routeCard: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#f3f4f6',
+    borderColor: '#e2e8f0',
     shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
-  routeCardDark: { backgroundColor: '#1f2937', borderColor: '#374151' },
+  routeCardDark: { backgroundColor: '#162329', borderColor: '#26383D' },
 
-  routeHeader: {
+  mapWrapper: {
+    width: '100%',
+    height: 155,
+    backgroundColor: '#0f172a',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  mapOverlayTop: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    right: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    zIndex: 10,
   },
-  routeNameBlock: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, flexShrink: 1 },
-  routeBadgeIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: '#10b981',
+  mapOverlayLeftBadges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mapStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  mapStatusBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  mapTransportBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  mapTransportEmoji: {
+    fontSize: 11,
+  },
+  mapTransportText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  mapFavBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  routeName: { fontSize: 14, fontWeight: '700', color: '#1f2937', flexShrink: 1 },
-  transportPill: {
-    backgroundColor: '#dcfce7',
-    borderRadius: 999,
+  mapFavBtnActive: {
+    backgroundColor: 'rgba(244, 63, 94, 0.9)',
+    borderColor: '#f43f5e',
+  },
+  mapOverlayBottom: {
+    position: 'absolute',
+    bottom: 8,
+    left: 10,
+    right: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  mapExpandHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(5, 150, 105, 0.9)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  mapExpandHintText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  mapMetricsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
     paddingHorizontal: 10,
     paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
-  transportPillText: { fontSize: 11, fontWeight: '600', color: '#047857' },
+  mapMetricsPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  mapMetricsPillDivider: {
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
 
-  favCircleBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f3f4f6',
+  cardBody: {
+    padding: 16,
+  },
+  routeName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1f2937',
+    marginBottom: 10,
+  },
+
+  originDestBox: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 10,
+  },
+  originDestBoxDark: {
+    backgroundColor: 'rgba(11, 18, 21, 0.6)',
+    borderColor: '#26383D',
+  },
+  originDestRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
   },
-  favCircleBtnActive: {
-    backgroundColor: '#ffe4e6',
+  pointDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  pointTextCol: {
+    flex: 1,
+  },
+  pointTag: {
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  pointAddress: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+    marginTop: 1,
+  },
+  originDestDivider: {
+    height: 1,
+    backgroundColor: '#e2e8f0',
+    marginVertical: 6,
+    marginLeft: 16,
   },
 
-  routeMainRow: { flexDirection: 'row', gap: 12 },
-  routeLineCol: { alignItems: 'center', paddingTop: 2 },
-  routeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10b981' },
-  routeLine: { width: 2, flex: 1, marginVertical: 4, backgroundColor: '#e5e7eb' },
-  routeTextCol: { flex: 1 },
-  routeLabel: { fontSize: 11, color: '#6b7280' },
-  routeValue: { fontSize: 13, color: '#1f2937', fontWeight: '500' },
-
-  metaRow: {
+  metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 12,
-    alignItems: 'center',
+    marginBottom: 12,
   },
-  chip: {
+  metricBox: {
+    width: '48.5%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#f0fdf4',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    gap: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 8,
     borderWidth: 1,
-    borderColor: '#dcfce7',
+    borderColor: '#f1f5f9',
   },
-  chipText: { fontSize: 11, fontWeight: '600', color: '#065f46' },
-  statusPill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: '#fef3c7',
-    borderWidth: 1,
-    borderColor: '#fcd34d',
+  metricBoxDark: {
+    backgroundColor: 'rgba(11, 18, 21, 0.4)',
+    borderColor: '#26383D',
   },
-  statusText: { fontSize: 11, fontWeight: '600', color: '#92400e' },
+  metricBoxEco: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+  },
+  metricBoxEcoDark: {
+    backgroundColor: 'rgba(6, 78, 59, 0.25)',
+    borderColor: 'rgba(5, 150, 105, 0.4)',
+  },
+  metricBoxCal: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#fed7aa',
+  },
+  metricBoxCalDark: {
+    backgroundColor: 'rgba(124, 45, 18, 0.25)',
+    borderColor: 'rgba(234, 88, 12, 0.4)',
+  },
+  metricIcon: {
+    fontSize: 16,
+  },
+  metricContent: {
+    flex: 1,
+  },
+  metricLabel: {
+    fontSize: 9,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  metricVal: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1f2937',
+    marginTop: 1,
+  },
 
-  actionsRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginTop: 12 },
-  useRouteBtn: {
+  actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  useRouteBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#059669',
+    borderRadius: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    shadowColor: '#059669',
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  useRouteBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  mapBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
     borderRadius: 12,
-    paddingVertical: 8,
+    paddingVertical: 9,
     paddingHorizontal: 12,
     backgroundColor: '#ecfdf5',
     borderWidth: 1,
     borderColor: '#a7f3d0',
   },
-  useRouteBtnText: { fontSize: 12, fontWeight: '600', color: '#059669' },
+  mapBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#059669',
+  },
   deleteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    width: 36,
+    height: 36,
     borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#fef2f2',
     borderWidth: 1,
     borderColor: '#fecaca',
