@@ -14,6 +14,7 @@ import { useAuth } from '../../src/shared/store/AuthContext';
 import apiClient from '../../src/shared/services/apiClient';
 import * as ImagePicker from 'expo-image-picker';
 import * as SecureStore from '../../src/shared/services/keyStorage';
+import { exportHtmlToPdf, exportCsvOrExcel } from '../../src/shared/utils/exportUtils';
 
 const avatarKeyFor = (userId: string | null) =>
   userId ? `profileAvatarUri_${userId}` : 'profileAvatarUri';
@@ -98,6 +99,8 @@ export default function ProfileScreen() {
   const [expandedFaq, setExpandedFaq] = useState<string | null>(null);
   const [myTickets, setMyTickets] = useState<any[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
+  const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
+  const [exportingFormat, setExportingFormat] = useState<'pdf' | 'excel' | null>(null);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -277,7 +280,7 @@ export default function ProfileScreen() {
   const loadMyTickets = useCallback(async () => {
     setLoadingTickets(true);
     try {
-      const { data } = await apiClient.get('/api/support/tickets');
+      const { data } = await apiClient.get('/api/support/tickets/mine');
       setMyTickets(Array.isArray(data) ? data : data?.items ?? []);
     } catch (e) {
       console.warn('[support] error cargando tickets:', e);
@@ -317,34 +320,127 @@ export default function ProfileScreen() {
   };
 
   const handleExportData = async (format: 'pdf' | 'excel') => {
+    setExportingFormat(format);
     try {
-      const Sharing = await import('expo-sharing');
-      const FileSystem = await import('expo-file-system/legacy');
-      // El backend acepta csv, json, xlsx. PDF lo generamos como csv descargable.
-      const backendFormat = format === 'pdf' ? 'csv' : 'xlsx';
-      const { data, headers } = await apiClient.get(`/api/exports/trips?format=${backendFormat}`, {
-        responseType: 'arraybuffer',
-      });
-      const ext = backendFormat === 'xlsx' ? 'xlsx' : 'csv';
-      const mimeType = backendFormat === 'xlsx'
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv';
-      const fileName = `ecoruteando-datos.${ext}`;
-      const fileUri = FileSystem.cacheDirectory + fileName;
-      // data es un ArrayBuffer; lo convertimos a base64 para FileSystem
-      const bytes = new Uint8Array(data);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      const base64 = btoa(binary);
-      await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri, { mimeType, dialogTitle: 'Exportar mis datos' });
+      let tripsList: any[] = [];
+      try {
+        const { data } = await apiClient.get('/api/mobility/trips/history');
+        const raw = Array.isArray(data) ? data : (data?.trips ?? data?.items ?? []);
+        tripsList = Array.isArray(raw) ? raw : [];
+      } catch (err) {
+        console.warn('[profile export] No se pudieron cargar viajes:', err);
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const userDisplay = fullName || `${auth.firstName ?? ''} ${(auth as any).lastName ?? ''}`.trim() || 'Usuario EcoRuteando';
+      const emailDisplay = profileEmail || auth.email || '—';
+      const phoneDisplay = phone || '—';
+
+      const totalKm = tripsList.reduce((sum, t) => sum + Number(t.distanceKm ?? t.distance ?? 0), 0);
+      const totalCo2 = tripsList.reduce((sum, t) => sum + Number(t.actualCo2Kg ?? t.estimatedCo2Kg ?? t.co2SavedKg ?? 0), 0);
+
+      if (format === 'pdf') {
+        const tripRows = tripsList.slice(0, 50).map((t, idx) => `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${t.startName || t.originAddress || 'Origen'}</td>
+            <td>${t.destinationName || t.destinationAddress || 'Destino'}</td>
+            <td>${t.transportMode || 'A pie'}</td>
+            <td>${Number(t.distanceKm ?? 0).toFixed(2)} km</td>
+            <td>${Number(t.actualCo2Kg ?? t.estimatedCo2Kg ?? t.co2SavedKg ?? 0).toFixed(3)} kg</td>
+            <td>${t.startedAt ? new Date(t.startedAt).toLocaleDateString('es-CO') : '—'}</td>
+          </tr>
+        `).join('');
+
+        const html = `
+          <html><head><meta charset="utf-8"><style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; padding: 24px; color: #1f2937; }
+            .header { border-bottom: 2px solid #059669; padding-bottom: 12px; margin-bottom: 16px; }
+            h1 { color: #059669; font-size: 22px; margin: 0; }
+            .sub { color: #6b7280; font-size: 12px; margin-top: 4px; }
+            .card { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px; margin-bottom: 16px; }
+            .card-title { font-weight: bold; color: #065f46; font-size: 14px; margin-bottom: 8px; }
+            .user-info { font-size: 13px; line-height: 1.6; color: #374151; }
+            .stats { display: flex; gap: 20px; font-size: 13px; color: #047857; font-weight: 500; margin-top: 6px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 11px; }
+            th { background: #059669; color: #fff; padding: 8px 6px; text-align: left; }
+            td { padding: 7px 6px; border-bottom: 1px solid #e5e7eb; }
+            tr:nth-child(even) td { background: #f9fafb; }
+            .footer { margin-top: 24px; font-size: 10px; color: #9ca3af; text-align: center; }
+          </style></head><body>
+            <div class="header">
+              <h1>🌿 EcoRuteando — Reporte de Datos del Usuario</h1>
+              <div class="sub">Generado el ${new Date().toLocaleDateString('es-CO')} a las ${new Date().toLocaleTimeString('es-CO')}</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Información de Perfil</div>
+              <div class="user-info">
+                <div><strong>Nombre:</strong> ${userDisplay}</div>
+                <div><strong>Correo Electrónico:</strong> ${emailDisplay}</div>
+                <div><strong>Teléfono:</strong> ${phoneDisplay}</div>
+              </div>
+              <div class="stats">
+                <span>Viajes Registrados: <strong>${tripsList.length}</strong></span>
+                <span>Distancia Total: <strong>${totalKm.toFixed(2)} km</strong></span>
+                <span>CO₂ Evitado/Ahorrado: <strong>${totalCo2.toFixed(3)} kg</strong></span>
+              </div>
+            </div>
+            ${tripsList.length > 0 ? `
+              <div style="font-weight: bold; font-size: 13px; color: #374151; margin-bottom: 4px;">Historial de Trayectos Recientes</div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Origen</th>
+                    <th>Destino</th>
+                    <th>Modo</th>
+                    <th>Distancia</th>
+                    <th>CO₂</th>
+                    <th>Fecha</th>
+                  </tr>
+                </thead>
+                <tbody>${tripRows}</tbody>
+              </table>
+            ` : '<p style="font-size: 12px; color: #6b7280;">No hay trayectos registrados aún en la cuenta.</p>'}
+            <div class="footer">EcoRuteando · Tu plataforma de movilidad inteligente y sostenible</div>
+          </body></html>
+        `;
+
+        await exportHtmlToPdf(html, `ecoruteando-perfil-${today}.pdf`);
       } else {
-        Dialog.alert(t('profile.account.export'), `Archivo guardado en: ${fileUri}`);
+        const escapeCsv = (str: any) => `"${String(str ?? '').replace(/"/g, '""')}"`;
+        const headers = ['#', 'Origen', 'Destino', 'Modo de Transporte', 'Distancia (km)', 'CO2 (kg)', 'Fecha'];
+        const csvRows = tripsList.map((t, idx) => [
+          idx + 1,
+          escapeCsv(t.startName || t.originAddress || 'Origen'),
+          escapeCsv(t.destinationName || t.destinationAddress || 'Destino'),
+          escapeCsv(t.transportMode || 'walking'),
+          Number(t.distanceKm ?? 0).toFixed(2),
+          Number(t.actualCo2Kg ?? t.estimatedCo2Kg ?? t.co2SavedKg ?? 0).toFixed(3),
+          escapeCsv(t.startedAt ? new Date(t.startedAt).toLocaleDateString('es-CO') : '')
+        ].join(','));
+
+        const csvContent = [
+          `"Reporte de Datos de Usuario - EcoRuteando"`,
+          `"Usuario",${escapeCsv(userDisplay)}`,
+          `"Correo",${escapeCsv(emailDisplay)}`,
+          `"Teléfono",${escapeCsv(phoneDisplay)}`,
+          `"Fecha de Generación",${escapeCsv(new Date().toLocaleString('es-CO'))}`,
+          `"Total Viajes",${tripsList.length}`,
+          `"Total Distancia (km)",${totalKm.toFixed(2)}`,
+          `"Total CO2 Ahorrado (kg)",${totalCo2.toFixed(3)}`,
+          ``,
+          headers.join(','),
+          ...csvRows
+        ].join('\r\n');
+
+        await exportCsvOrExcel(csvContent, `ecoruteando-datos-${today}.csv`);
       }
     } catch (e: any) {
-      console.warn('[export]', e);
-      Dialog.alert(t('auth.errorTitle'), e?.response?.data?.detail || e?.message || 'No se pudo exportar', { tone: 'error' });
+      console.warn('[handleExportData]', e);
+      Dialog.alert(t('auth.errorTitle'), e?.message || 'No se pudieron exportar los datos.', { tone: 'error' });
+    } finally {
+      setExportingFormat(null);
     }
   };
 
@@ -664,16 +760,32 @@ export default function ProfileScreen() {
                 <View style={s.exportBlock}>
                   <Text style={s.fieldLabel}>{t('profile.account.export')}</Text>
                   <View style={s.exportBtnRow}>
-                    <TouchableOpacity style={[s.exportBtn, isDark && s.exportBtnDark]} onPress={() => handleExportData('pdf')}>
-                      <Ionicons name="document-text-outline" size={16} color={isDark ? '#34D399' : '#059669'} />
+                    <TouchableOpacity
+                      style={[s.exportBtn, isDark && s.exportBtnDark, exportingFormat !== null && { opacity: 0.6 }]}
+                      disabled={exportingFormat !== null}
+                      onPress={() => handleExportData('pdf')}
+                    >
+                      {exportingFormat === 'pdf' ? (
+                        <ActivityIndicator size="small" color={isDark ? '#34D399' : '#059669'} />
+                      ) : (
+                        <Ionicons name="document-text-outline" size={16} color={isDark ? '#34D399' : '#059669'} />
+                      )}
                       <Text style={[s.exportBtnText, isDark && { color: '#34D399' }]}>
-                        {t('profile.account.exportOptions.pdf')}
+                        {exportingFormat === 'pdf' ? 'Exportando...' : t('profile.account.exportOptions.pdf')}
                       </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[s.exportBtn, isDark && s.exportBtnDark]} onPress={() => handleExportData('excel')}>
-                      <Ionicons name="grid-outline" size={16} color={isDark ? '#34D399' : '#059669'} />
+                    <TouchableOpacity
+                      style={[s.exportBtn, isDark && s.exportBtnDark, exportingFormat !== null && { opacity: 0.6 }]}
+                      disabled={exportingFormat !== null}
+                      onPress={() => handleExportData('excel')}
+                    >
+                      {exportingFormat === 'excel' ? (
+                        <ActivityIndicator size="small" color={isDark ? '#34D399' : '#059669'} />
+                      ) : (
+                        <Ionicons name="grid-outline" size={16} color={isDark ? '#34D399' : '#059669'} />
+                      )}
                       <Text style={[s.exportBtnText, isDark && { color: '#34D399' }]}>
-                        {t('profile.account.exportOptions.excel')}
+                        {exportingFormat === 'excel' ? 'Exportando...' : t('profile.account.exportOptions.excel')}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -966,23 +1078,100 @@ export default function ProfileScreen() {
                     </Text>
                   </View>
                 ) : (
-                  myTickets.map((ticket, idx) => (
-                    <View key={ticket.id ?? idx} style={[s.ticketItem, isDark && s.ticketItemDark]}>
-                      <View style={s.ticketRow}>
-                        <Text style={[s.ticketSubject, isDark && { color: '#e2e8f0' }]} numberOfLines={1}>
-                          {ticket.subject}
-                        </Text>
-                        <View style={[s.ticketBadge, { backgroundColor: ticket.status === 'resolved' || ticket.status === 'closed' ? '#dcfce7' : ticket.status === 'in_progress' ? '#fef3c7' : '#fee2e2' }]}>
-                          <Text style={{ fontSize: 10, fontWeight: '700', color: ticket.status === 'resolved' || ticket.status === 'closed' ? '#166534' : ticket.status === 'in_progress' ? '#92400e' : '#991b1b' }}>
-                            {ticket.status === 'resolved' || ticket.status === 'closed' ? 'Resuelta' : ticket.status === 'in_progress' ? 'En proceso' : 'Pendiente'}
+                  myTickets.map((ticket, idx) => {
+                    const ticketKey = String(ticket.id ?? idx);
+                    const isExpanded = expandedTicketId === ticketKey;
+                    const st = String(ticket.status || '').toLowerCase().replace('_', '');
+                    const isResolved = st === 'resolved' || st === 'closed';
+                    const isInProgress = st === 'inprogress';
+                    const badgeBg = isResolved ? '#dcfce7' : isInProgress ? '#fef3c7' : '#fee2e2';
+                    const badgeColor = isResolved ? '#166534' : isInProgress ? '#92400e' : '#991b1b';
+                    const statusText = isResolved ? 'Resuelta / Respondida' : isInProgress ? 'En proceso' : 'Pendiente';
+
+                    return (
+                      <TouchableOpacity
+                        key={ticketKey}
+                        activeOpacity={0.8}
+                        onPress={() => setExpandedTicketId(isExpanded ? null : ticketKey)}
+                        style={[s.ticketItem, isDark && s.ticketItemDark]}
+                      >
+                        <View style={s.ticketRow}>
+                          <Text style={[s.ticketSubject, isDark && { color: '#e2e8f0' }]} numberOfLines={1}>
+                            {ticket.subject}
                           </Text>
+                          <View style={[s.ticketBadge, { backgroundColor: badgeBg }]}>
+                            <Text style={{ fontSize: 10, fontWeight: '700', color: badgeColor }}>
+                              {statusText}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
-                      <Text style={[s.ticketDate, isDark && { color: '#64748b' }]}>
-                        {ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : ''}
-                      </Text>
-                    </View>
-                  ))
+
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                          <Text style={[s.ticketDate, isDark && { color: '#64748b' }]}>
+                            {ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : ''}
+                          </Text>
+                          <Ionicons
+                            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                            size={14}
+                            color={isDark ? '#64748b' : '#9ca3af'}
+                          />
+                        </View>
+
+                        {/* Detalle expandible con consulta y respuestas del soporte */}
+                        {isExpanded && (
+                          <View style={{ marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: isDark ? '#26383D' : '#e5e7eb' }}>
+                            <Text style={{ fontSize: 11, fontWeight: '700', textTransform: 'uppercase', color: isDark ? '#94a3b8' : '#6b7280', marginBottom: 4 }}>
+                              Tu consulta inicial:
+                            </Text>
+                            <Text style={{ fontSize: 12, color: isDark ? '#cbd5e1' : '#374151', lineHeight: 17, marginBottom: 10 }}>
+                              {ticket.message || 'Sin mensaje adicional'}
+                            </Text>
+
+                            {/* Historial de respuestas */}
+                            {Array.isArray(ticket.messages) && ticket.messages.length > 0 ? (
+                              <View style={{ gap: 8, marginTop: 4 }}>
+                                <Text style={{ fontSize: 11, fontWeight: '700', textTransform: 'uppercase', color: isDark ? '#34d399' : '#059669' }}>
+                                  Respuestas recibidas:
+                                </Text>
+                                {ticket.messages.map((m: any, mIdx: number) => (
+                                  <View
+                                    key={mIdx}
+                                    style={{
+                                      padding: 10,
+                                      borderRadius: 10,
+                                      backgroundColor: m.isAdmin
+                                        ? isDark ? 'rgba(6, 78, 59, 0.4)' : '#ecfdf5'
+                                        : isDark ? 'rgba(30, 41, 59, 0.5)' : '#f3f4f6',
+                                      borderWidth: 1,
+                                      borderColor: m.isAdmin
+                                        ? isDark ? '#065f46' : '#a7f3d0'
+                                        : isDark ? '#334155' : '#e5e7eb',
+                                    }}
+                                  >
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
+                                      <Text style={{ fontSize: 11, fontWeight: '700', color: m.isAdmin ? '#10b981' : isDark ? '#cbd5e1' : '#4b5563' }}>
+                                        {m.isAdmin ? '🛡️ Soporte EcoRuteando' : '👤 Tú'}
+                                      </Text>
+                                      <Text style={{ fontSize: 10, color: isDark ? '#64748b' : '#9ca3af' }}>
+                                        {m.createdAt ? new Date(m.createdAt).toLocaleDateString() : ''}
+                                      </Text>
+                                    </View>
+                                    <Text style={{ fontSize: 12, color: isDark ? '#e2e8f0' : '#1f2937', lineHeight: 16 }}>
+                                      {m.message}
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                            ) : (
+                              <Text style={{ fontSize: 11, fontStyle: 'italic', color: isDark ? '#64748b' : '#9ca3af', marginTop: 4 }}>
+                                Esperando respuesta oficial del equipo de soporte. Te notificaremos a tu correo registrado cuando haya novedades.
+                              </Text>
+                            )}
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })
                 )}
               </View>
             </>
