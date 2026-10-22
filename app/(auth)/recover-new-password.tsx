@@ -1,6 +1,6 @@
 // app/(auth)/recover-new-password.tsx — estilo web NewPassword.jsx
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, TextInput, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, TextInput, Animated, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
@@ -55,7 +55,7 @@ export default function RecoverNewPasswordScreen() {
         <TouchableOpacity onPress={toggleTheme} style={[s.themeBtn, isDark && s.themeBtnDark]}><Text>{isDark ? '☀️' : '🌙'}</Text></TouchableOpacity>
         <ScrollView contentContainerStyle={s.scrollCenter}>
           <View style={s.logoWrap}>
-            <View style={[s.logoBox, isDark && s.logoBoxDark]}><Ionicons name="leaf" size={26} color="#059669" /></View>
+            <View style={[s.logoBox, isDark && s.logoBoxDark]}><Image source={require("../../assets/logo.png")} style={{ width: 40, height: 40, resizeMode: "contain" }} /></View>
             <Text style={[s.appName, isDark && { color: '#e2e8f0' }]}>{t('common.appName')}</Text>
           </View>
           <View style={[s.successCircle, isDark && { backgroundColor: '#064e3b' }]}>
@@ -79,7 +79,7 @@ export default function RecoverNewPasswordScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={s.logoWrap}>
-            <View style={[s.logoBox, isDark && s.logoBoxDark]}><Ionicons name="leaf" size={26} color="#059669" /></View>
+            <View style={[s.logoBox, isDark && s.logoBoxDark]}><Image source={require("../../assets/logo.png")} style={{ width: 40, height: 40, resizeMode: "contain" }} /></View>
             <Text style={[s.appName, isDark && { color: '#e2e8f0' }]}>{t('common.appName')}</Text>
           </View>
 
