@@ -2,7 +2,8 @@ import axios from 'axios';
 import * as SecureStore from './keyStorage';
 import { tGlobal } from '../../i18n/translations';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5124';
+const DEFAULT_URL = 'https://feeding-irrigation-milk-log.trycloudflare.com';
+export const API_BASE = process.env.EXPO_PUBLIC_API_URL || DEFAULT_URL;
 
 const apiClient = axios.create({
   baseURL: API_BASE,
@@ -24,6 +25,10 @@ const processQueue = (error: unknown, token: string | null) => {
 };
 
 apiClient.interceptors.request.use(async config => {
+  const customUrl = await SecureStore.getItemAsync('customApiUrl');
+  if (customUrl && customUrl.trim()) {
+    config.baseURL = customUrl.trim().replace(/\/+$/, '');
+  }
   const token = await SecureStore.getItemAsync('accessToken');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -62,7 +67,9 @@ apiClient.interceptors.response.use(
         const refreshToken = await SecureStore.getItemAsync('refreshToken');
         if (!refreshToken) throw new Error('No has iniciado sesión o tu sesión ha expirado.');
 
-        const { data } = await axios.post(`${API_BASE}/api/auth/refresh`, {
+        const customUrl = await SecureStore.getItemAsync('customApiUrl');
+        const activeBase = (customUrl && customUrl.trim()) ? customUrl.trim().replace(/\/+$/, '') : API_BASE;
+        const { data } = await axios.post(`${activeBase}/api/auth/refresh`, {
           refreshToken,
         });
 
