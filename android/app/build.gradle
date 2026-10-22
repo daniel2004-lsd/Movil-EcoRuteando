@@ -84,27 +84,19 @@ def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 android {
     ndkVersion rootProject.ext.ndkVersion
 
-    buildToolsVersion rootProject.ext.buildToolsVersion
-    compileSdk rootProject.ext.compileSdkVersion
+    compileSdk 36
 
     namespace 'com.ecoruteando.mobile'
     defaultConfig {
         applicationId 'com.ecoruteando.mobile'
+        minSdkVersion 24
+        targetSdkVersion 34
+        versionCode 7
+        versionName "1.0.6"
 
-        // Google Maps API key: vive en android/local.properties (gitignored).
-        // NUNCA hardcodear la key aqui ni en AndroidManifest.xml.
-        def mapsKey = ''
-        def localProps = rootProject.file('local.properties')
-        if (localProps.exists()) {
-            def props = new Properties()
-            localProps.withInputStream { props.load(it) }
-            mapsKey = props.getProperty('MAPS_API_KEY', '')
-        }
-        manifestPlaceholders = [MAPS_API_KEY: mapsKey]
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
+        manifestPlaceholders = [
+            MAPS_API_KEY: "[REDACTED_GOOGLE_MAPS_KEY]"
+        ]
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -114,6 +106,8 @@ android {
             storePassword 'android'
             keyAlias 'androiddebugkey'
             keyPassword 'android'
+            v1SigningEnabled true
+            v2SigningEnabled true
         }
     }
     buildTypes {
@@ -134,8 +128,7 @@ android {
     }
     packagingOptions {
         jniLibs {
-            def enableLegacyPackaging = findProperty('expo.useLegacyPackaging') ?: 'false'
-            useLegacyPackaging enableLegacyPackaging.toBoolean()
+            useLegacyPackaging true
         }
     }
     androidResources {
