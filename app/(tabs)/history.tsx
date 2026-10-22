@@ -472,7 +472,7 @@ export default function HistoryScreen() {
                 >
                   <Ionicons name="download-outline" size={16} color="#166534" />
                   <Text style={s.exportBtnExcelText}>
-                    {exporting === 'excel' ? 'Generando...' : 'Excel (CSV)'}
+                    {exporting === 'excel' ? 'Generando...' : 'Excel'}
                   </Text>
                 </TouchableOpacity>
 

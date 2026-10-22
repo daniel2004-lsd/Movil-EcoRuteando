@@ -13,7 +13,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://ecoruteando-backend.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://accidents-minolta-latino-manufacturers.trycloudflare.com"
       }
     },
     "production": {
