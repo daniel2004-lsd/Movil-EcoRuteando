@@ -80,11 +80,9 @@ const MapView = React.forwardRef((props: MapEngineProps, ref: any) => {
 });
 MapView.displayName = 'MapView';
 
-// En Expo Go los componentes del mapa nativo no tienen teselas que dibujar,
-// asi que se sustituyen por stubs (el WebView ya muestra el mapa).
 const Marker: any = isExpoGo ? (_p: any) => null : RealMarker;
 const Polyline: any = isExpoGo ? (_p: any) => null : RealPolyline;
-const UrlTile: any = isExpoGo ? (_p: any) => null : RealUrlTile;
+const UrlTile: any = RealUrlTile;
 const Callout: any = isExpoGo ? (_p: any) => null : RealCallout;
 
 export { Marker, Polyline, UrlTile, Callout, PROVIDER_GOOGLE };

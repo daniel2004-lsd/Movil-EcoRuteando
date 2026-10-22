@@ -6,8 +6,14 @@
       "ecoruteando",
       "com.ecoruteando.mobile"
     ],
-    "version": "1.0.0",
+    "version": "1.0.6",
     "orientation": "portrait",
+    "icon": "./assets/logo.png",
+    "splash": {
+      "image": "./assets/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#064e3b"
+    },
     "platforms": [
       "ios",
       "android",
@@ -18,7 +24,9 @@
     ],
     "android": {
       "package": "com.ecoruteando.mobile",
+      "versionCode": 7,
       "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#e8f3ec"
       },
       "config": {
