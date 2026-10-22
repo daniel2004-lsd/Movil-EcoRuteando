@@ -1246,18 +1246,6 @@ export default function PlanRouteScreen() {
         onMapReady={() => console.log('[MAPA] onMapReady - MapView montado')}
         onMapLoaded={() => console.log('[MAPA] onMapLoaded - teselas cargadas')}
       >
-        {/*
-          Expo Go (SDK 55+) trae una API key de Google Maps expirada y no usa
-          la del proyecto, asi que las teselas de Google nunca cargan.
-          En Expo Go superponemos OpenStreetMap; en dev build se ve Google Maps.
-        */}
-        {isExpoGo && (
-          <UrlTile
-            urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-            maximumZ={19}
-            flipY={false}
-          />
-        )}
         {origin && (
           <Marker coordinate={origin} title={t('planRoute.origin')} description={origin.name}>
             <View style={styles.originMarker}>
@@ -1383,10 +1371,6 @@ export default function PlanRouteScreen() {
             );
           })}
       </MapView>
-
-      {Constants.executionEnvironment === 'storeClient' && (
-        <Text style={styles.osmAttribution}>© OpenStreetMap</Text>
-      )}
 
       {/* Barra de búsqueda flotante / panel expandido */}
       <MapSearchPanel
@@ -1633,6 +1617,7 @@ export default function PlanRouteScreen() {
           <RouteBottomSheet
             route={route}
             estimate={estimate}
+            isGuest={isGuest}
             activeTripId={activeTripId}
             startingTrip={startingTrip}
             completing={completing}
