@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as SecureStore from './keyStorage';
 import { tGlobal } from '../../i18n/translations';
 
-const DEFAULT_URL = 'https://feeding-irrigation-milk-log.trycloudflare.com';
+const DEFAULT_URL = 'https://ecoruteandobackend.onrender.com';
 export const API_BASE = process.env.EXPO_PUBLIC_API_URL || DEFAULT_URL;
 
 const apiClient = axios.create({
