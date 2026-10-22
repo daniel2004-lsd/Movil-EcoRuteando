@@ -18,6 +18,7 @@
   import { LogoCircle } from '../src/shared/components/landing/LogoCircle';
   import { FeatureCard } from '../src/shared/components/landing/FeatureCard';
   import { WhyItem } from '../src/shared/components/landing/WhyItem';
+  import { TermsModal } from '../src/shared/components/auth/TermsModal';
 
   import { useLanguage } from '../src/shared/store/LanguageContext';
   import { useThemeMode } from '../src/shared/store/ThemeContext';
@@ -32,6 +33,7 @@
   export default function LandingScreen() {
     const router = useRouter();
     const [menuOpen, setMenuOpen] = useState(false);
+    const [showTerms, setShowTerms] = useState(false);
 
     const { t, lang, setLang } = useLanguage();
     const { theme, toggleTheme } = useThemeMode();
@@ -280,7 +282,9 @@
             <View style={s.footerLinksRow}>
               <Text style={s.footerLink}> {t('landing.privacy')}</Text>
               <Text style={s.footerDot}>·</Text>
-              <Text style={s.footerLink}>{t('landing.terms')}</Text>
+              <TouchableOpacity onPress={() => setShowTerms(true)} activeOpacity={0.7}>
+                <Text style={s.footerLink}>{t('landing.terms')}</Text>
+              </TouchableOpacity>
               <Text style={s.footerDot}>·</Text>
               <Text style={s.footerLink}>{t('landing.contact')}</Text>
             </View>
@@ -466,6 +470,14 @@
             </View>
           </View>
         </Modal>
+        <TermsModal
+          visible={showTerms}
+          onClose={() => setShowTerms(false)}
+          onAccept={() => {
+            setShowTerms(false);
+            router.push('/(auth)/register');
+          }}
+        />
       </>
     );
   }

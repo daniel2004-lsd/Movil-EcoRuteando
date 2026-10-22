@@ -121,10 +121,13 @@ export default function LoginScreen() {
       const firstNameForSign = (typeof idp.given_name === 'string' ? idp.given_name.trim() : '');
       await signIn({accessToken:data.accessToken,refreshToken:data.refreshToken,email: emailForSign, firstName: firstNameForSign});
       router.replace('/(tabs)');
-    } catch(e:any){ console.warn('[OAuth-Google] excepción:', e?.message || e);
-    Dialog.alert(t('auth.oauthErrorTitle'), t('auth.oauthNoToken'), {
-      tone: 'error',
-    }); }
+    } catch(e:any) {
+      console.warn('[OAuth-Google] excepción:', e?.message || e);
+      const errMsg = e?.response?.data?.detail || e?.response?.data?.message || e?.message || t('auth.oauthNoToken');
+      Dialog.alert(t('auth.oauthErrorTitle'), errMsg, {
+        tone: 'error',
+      });
+    }
   };
 
   useEffect(() => {
