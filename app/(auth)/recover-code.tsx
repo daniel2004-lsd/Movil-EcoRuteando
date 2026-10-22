@@ -1,6 +1,6 @@
 // app/(auth)/recover-code.tsx — estilo web VerifyCode.jsx
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TextInput, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TextInput, TouchableOpacity, Animated, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
@@ -96,7 +96,7 @@ export default function RecoverCodeScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={s.logoWrap}>
-            <View style={[s.logoBox, isDark && s.logoBoxDark]}><Ionicons name="leaf" size={26} color="#059669" /></View>
+            <View style={[s.logoBox, isDark && s.logoBoxDark]}><Image source={require("../../assets/logo.png")} style={{ width: 40, height: 40, resizeMode: "contain" }} /></View>
             <Text style={[s.appName, isDark && { color: '#e2e8f0' }]}>{t('common.appName')}</Text>
           </View>
 
