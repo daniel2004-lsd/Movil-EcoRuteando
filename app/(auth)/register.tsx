@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SocialBtn } from '../../src/shared/components/auth/SocialBtn';
+import { TermsModal } from '../../src/shared/components/auth/TermsModal';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import apiClient from '../../src/shared/services/apiClient';
@@ -88,23 +89,18 @@ export default function RegisterScreen() {
         tone: 'error',
       }); return; }
       const idp = (tj.id_token ? decodeJwtPayload(tj.id_token) : null) || {};
-      const {data}=await apiClient.post('/api/auth/oauth/login',{provider:'google',accessToken:tok});
-      if (data.isNewUser === false) {
-        Dialog.alert(
-          t('auth.alreadyRegisteredTitle'),
-          t('auth.alreadyRegisteredOAuthMsg'),
-          [{ text: t('auth.loginButton'), onPress: () => router.replace('/(auth)/login') }]
-        , { tone: 'warning', icon: 'mail-open' });
-        return;
-      }
+      const { data } = await apiClient.post('/api/auth/oauth/login', { provider: 'google', accessToken: tok });
       const emailForSign = (typeof idp.email === 'string' ? idp.email.trim() : '') || 'oauth@google.com';
       const firstNameForSign = (typeof idp.given_name === 'string' ? idp.given_name.trim() : '');
-      await signIn({accessToken:data.accessToken,refreshToken:data.refreshToken,email: emailForSign, firstName: firstNameForSign});
+      await signIn({ accessToken: data.accessToken, refreshToken: data.refreshToken, email: emailForSign, firstName: firstNameForSign });
       router.replace('/(tabs)');
-    } catch(e:any){ console.warn('[OAuth-Google] excepción:', e?.message || e);
-    Dialog.alert(t('auth.oauthErrorTitle'), t('auth.oauthNoToken'), {
-      tone: 'error',
-    }); }
+    } catch(e:any) {
+      console.warn('[OAuth-Google] excepción:', e?.message || e);
+      const errMsg = e?.response?.data?.detail || e?.response?.data?.message || e?.message || t('auth.oauthNoToken');
+      Dialog.alert(t('auth.oauthErrorTitle'), errMsg, {
+        tone: 'error',
+      });
+    }
   };
 
   return (
@@ -185,6 +181,14 @@ export default function RegisterScreen() {
           <Text style={[s.tagline, isDark&&{color:'#94a3b8'}]}>{t('auth.communityTagline')}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
+      <TermsModal
+        visible={showTerms}
+        onClose={() => setShowTerms(false)}
+        onAccept={() => {
+          setTermsAccepted(true);
+          setShowTerms(false);
+        }}
+      />
     </LinearGradient>
   );
 }
