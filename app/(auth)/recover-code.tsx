@@ -65,7 +65,8 @@ export default function RecoverCodeScreen() {
     if (joined.length < 6) return;
     setLoading(true);
     try {
-      router.push({ pathname: '/(auth)/recover-new-password', params: { token: joined } });
+      const targetEmail = email || (globalThis as any).__recoveryEmail || '';
+      router.push({ pathname: '/(auth)/recover-new-password', params: { token: joined, email: targetEmail } });
     } finally { setLoading(false); }
   };
 
