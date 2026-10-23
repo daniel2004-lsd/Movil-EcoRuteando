@@ -95,7 +95,7 @@ android {
         versionName "1.0.7"
 
         manifestPlaceholders = [
-            MAPS_API_KEY: "[REDACTED_GOOGLE_MAPS_KEY]"
+            MAPS_API_KEY: System.getenv("EXPO_PUBLIC_GOOGLE_MAPS_KEY") ?: (project.findProperty("EXPO_PUBLIC_GOOGLE_MAPS_KEY") ?: "")
         ]
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""

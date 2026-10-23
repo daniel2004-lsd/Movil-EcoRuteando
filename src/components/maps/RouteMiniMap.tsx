@@ -13,7 +13,7 @@ interface RouteMiniMapProps {
 }
 
 const GOOGLE_MAPS_API_KEY =
-  process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '[REDACTED_GOOGLE_MAPS_KEY]';
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '';
 
 export function decodePolyline(encoded: string): { latitude: number; longitude: number }[] {
   const points: { latitude: number; longitude: number }[] = [];
