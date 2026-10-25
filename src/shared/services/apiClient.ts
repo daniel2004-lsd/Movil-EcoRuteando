@@ -1,6 +1,7 @@
 import axios from 'axios';
 import * as SecureStore from './keyStorage';
 import { tGlobal } from '../../i18n/translations';
+import { getSafeBaseUrl } from '../utils/urlValidation';
 
 const DEFAULT_URL = 'https://ecoruteandobackend.onrender.com';
 export const API_BASE = process.env.EXPO_PUBLIC_API_URL || DEFAULT_URL;
@@ -26,9 +27,7 @@ const processQueue = (error: unknown, token: string | null) => {
 
 apiClient.interceptors.request.use(async config => {
   const customUrl = await SecureStore.getItemAsync('customApiUrl');
-  if (customUrl && customUrl.trim()) {
-    config.baseURL = customUrl.trim().replace(/\/+$/, '');
-  }
+  config.baseURL = getSafeBaseUrl(customUrl, API_BASE, !__DEV__);
   const token = await SecureStore.getItemAsync('accessToken');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -68,7 +67,7 @@ apiClient.interceptors.response.use(
         if (!refreshToken) throw new Error('No has iniciado sesión o tu sesión ha expirado.');
 
         const customUrl = await SecureStore.getItemAsync('customApiUrl');
-        const activeBase = (customUrl && customUrl.trim()) ? customUrl.trim().replace(/\/+$/, '') : API_BASE;
+        const activeBase = getSafeBaseUrl(customUrl, API_BASE, !__DEV__);
         const { data } = await axios.post(`${activeBase}/api/auth/refresh`, {
           refreshToken,
         });
