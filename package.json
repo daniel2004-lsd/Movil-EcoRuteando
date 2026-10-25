@@ -4,6 +4,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
+    "typecheck": "tsc --noEmit",
     "test": "tsc --ignoreConfig src/shared/utils/urlValidation.ts src/shared/utils/passwordRecoveryValidation.ts --module es2022 --target es2022 && node --test src/shared/utils/__tests__/*.test.mjs && rm -f src/shared/utils/urlValidation.js src/shared/utils/passwordRecoveryValidation.js",
     "demo": "bash scripts/start-demo.sh",
     "android": "expo run:android",
