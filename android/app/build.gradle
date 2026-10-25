@@ -81,6 +81,29 @@ def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBu
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// Inyección dinámica y segura de la clave de Google Maps Platform (sin almacenar secretos en Git)
+def resolveGoogleMapsApiKey() {
+    def key = System.getenv("EXPO_PUBLIC_GOOGLE_MAPS_KEY") ?:
+              System.getenv("MAPS_API_KEY") ?:
+              (project.findProperty("EXPO_PUBLIC_GOOGLE_MAPS_KEY") ?:
+              (project.findProperty("MAPS_API_KEY") ?: ""))
+    if (!key) {
+        def envFile = file("${rootDir}/../.env")
+        if (envFile.exists()) {
+            envFile.eachLine { line ->
+                def matcher = (line =~ /^\s*EXPO_PUBLIC_GOOGLE_MAPS_KEY\s*=\s*(.*)\s*$/)
+                if (matcher.matches()) {
+                    key = matcher[0][1].trim().replaceAll(/^["']|["']$/, '')
+                }
+            }
+        }
+    }
+    if (!key) {
+        logger.warn("[GoogleMaps] ADVERTENCIA: No se detectó clave de Google Maps (EXPO_PUBLIC_GOOGLE_MAPS_KEY / MAPS_API_KEY). El mapa nativo no cargará teselas.")
+    }
+    return key ?: ""
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
 
@@ -95,7 +118,7 @@ android {
         versionName "1.0.7"
 
         manifestPlaceholders = [
-            MAPS_API_KEY: "[REDACTED_GOOGLE_MAPS_KEY]"
+            MAPS_API_KEY: resolveGoogleMapsApiKey()
         ]
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
