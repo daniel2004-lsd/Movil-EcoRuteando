@@ -1,14 +1,19 @@
-// app/(auth)/recover-new-password.tsx — estilo web NewPassword.jsx
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, TextInput, Animated, Image } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 import apiClient from '../../src/shared/services/apiClient';
+import {
+  validateNewPassword,
+  buildResetPasswordPayload,
+  mapRecoveryApiError,
+} from '../../src/shared/utils/passwordRecoveryValidation';
 
 export default function RecoverNewPasswordScreen() {
   const router = useRouter();
+  const { token, email } = useLocalSearchParams<{ token?: string; email?: string }>();
   const { theme, toggleTheme } = useThemeMode();
   const { t } = useLanguage();
   const isDark = theme === 'dark';
@@ -38,15 +43,36 @@ export default function RecoverNewPasswordScreen() {
 
   const handleSubmit = async () => {
     setError(null);
-    if (pass.length < 8) { setError(t('auth.passwordMin8Error')); return; }
-    if (pass !== pass2) { setError(t('auth.passwordMismatch')); return; }
+    const resolvedToken = (token || (globalThis as any).__recoveryToken || '').trim();
+    const resolvedEmail = (email || (globalThis as any).__recoveryEmail || '').trim().toLowerCase();
+
+    if (!resolvedToken) {
+      setError('No se encontró el código de verificación. Vuelve a solicitarlo.');
+      return;
+    }
+    if (!resolvedEmail) {
+      setError('No se identificó el correo electrónico asociado. Vuelve a iniciar el proceso.');
+      return;
+    }
+
+    const passwordValidation = validateNewPassword(pass, pass2);
+    if (!passwordValidation.isValid) {
+      setError(passwordValidation.error);
+      return;
+    }
+
     setLoading(true);
     try {
-      await apiClient.post('/api/auth/reset-password', { token: '', newPassword: pass });
+      const payload = buildResetPasswordPayload(resolvedToken, pass, resolvedEmail);
+      await apiClient.post('/api/auth/reset-password', payload);
+      delete (globalThis as any).__recoveryToken;
+      delete (globalThis as any).__recoveryEmail;
       setSuccess(true);
     } catch (err: any) {
-      setError(err?.response?.data?.message || t('auth.resetPassError'));
-    } finally { setLoading(false); }
+      setError(mapRecoveryApiError(err, t('auth.resetPassError') || 'Error al restablecer la contraseña.'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (success) {
