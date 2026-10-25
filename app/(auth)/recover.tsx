@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 import apiClient from '../../src/shared/services/apiClient';
+import { validateRecoveryEmail, mapRecoveryApiError } from '../../src/shared/utils/passwordRecoveryValidation';
 
 function formatWait(sec: number) {
   if (sec < 60) return `${sec}s`;
@@ -31,25 +32,32 @@ export default function RecoverScreen() {
     return () => clearInterval(id);
   }, [retrySeconds]);
 
-  const validateEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
-
   const handleSend = async () => {
     if (retrySeconds > 0) return;
-    if (!validateEmail(email)) { setError(t('auth.invalidEmailMsg')); return; }
-    setError(''); setLoading(true);
+    const emailValidation = validateRecoveryEmail(email);
+    if (!emailValidation.isValid) {
+      setError(emailValidation.error || t('auth.invalidEmailMsg') || 'Ingresa un correo válido.');
+      return;
+    }
+    const cleanEmail = emailValidation.normalizedEmail;
+    setError('');
+    setLoading(true);
     try {
-      await apiClient.post('/api/auth/forgot-password', { email: email.trim() });
+      await apiClient.post('/api/auth/forgot-password', { email: cleanEmail });
+      (globalThis as any).__recoveryEmail = cleanEmail;
       setSent(true);
     } catch (err: any) {
       if (err.response?.status === 429) {
         const d = err.response.data || {};
         const retryAfter = Number(d.retryAfterSeconds) || parseInt(err.response?.headers?.['retry-after'], 10) || 60;
         setRetrySeconds(retryAfter);
-        setError(t('auth.tooManyRequests'));
+        setError(t('auth.tooManyRequests') || 'Demasiadas solicitudes. Espera unos minutos.');
       } else {
-        setError(err.response?.data?.message || t('auth.sendCodeError'));
+        setError(mapRecoveryApiError(err, t('auth.sendCodeError') || 'No fue posible enviar el código.'));
       }
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (sent) {
@@ -67,7 +75,7 @@ export default function RecoverScreen() {
           <Text style={[s.title, isDark && { color: '#e2e8f0' }]}>{t('auth.recoverSentTitle')}</Text>
           <Text style={[s.sub, isDark && { color: '#94a3b8' }]}>{t('auth.recoverSentSubtitle')}</Text>
           <Text style={[s.emailText, isDark && { color: '#e2e8f0' }]}>{email}</Text>
-          <TouchableOpacity onPress={() => router.push({ pathname: '/(auth)/recover-code', params: { email } })} style={s.primaryBtn}>
+          <TouchableOpacity onPress={() => router.push({ pathname: '/(auth)/recover-code', params: { email: email.trim().toLowerCase() } })} style={s.primaryBtn}>
             <Text style={s.primaryText}>{t('auth.recoverHaveCode')}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setSent(false)}>
@@ -119,12 +127,12 @@ export default function RecoverScreen() {
               autoCapitalize="none"
               style={[s.input, isDark && s.inputDark]}
             />
-            {email.length > 0 && validateEmail(email) && !error && <Text style={s.okText}>{t('auth.emailValid')}</Text>}
+            {email.length > 0 && validateRecoveryEmail(email).isValid && !error && <Text style={s.okText}>{t('auth.emailValid')}</Text>}
 
             <TouchableOpacity
               onPress={handleSend}
-              disabled={loading || retrySeconds > 0 || !validateEmail(email)}
-              style={[s.primaryBtn, (loading || retrySeconds > 0 || !validateEmail(email)) && { opacity: 0.5 }]}
+              disabled={loading || retrySeconds > 0 || !validateRecoveryEmail(email).isValid}
+              style={[s.primaryBtn, (loading || retrySeconds > 0 || !validateRecoveryEmail(email).isValid) && { opacity: 0.5 }]}
             >
               <Text style={s.primaryText}>
                 {retrySeconds > 0 ? `Espera ${formatWait(retrySeconds)}` : loading ? t('auth.sendingCode') : t('auth.sendCode')}
