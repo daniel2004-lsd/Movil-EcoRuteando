@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 import apiClient from '../../src/shared/services/apiClient';
+import { validateRecoveryToken, mapRecoveryApiError } from '../../src/shared/utils/passwordRecoveryValidation';
 
 function formatWait(sec: number) {
   if (sec < 60) return `${sec}s`;
@@ -62,32 +63,55 @@ export default function RecoverCodeScreen() {
 
   const handleVerify = () => {
     const joined = code.join('');
-    if (joined.length < 6) return;
+    const tokenValidation = validateRecoveryToken(joined);
+    if (!tokenValidation.isValid) {
+      setError(tokenValidation.error || t('auth.recoverCodeErrorFill') || 'Por favor introduce los 6 dígitos del código.');
+      return;
+    }
+    const targetEmail = (email || (globalThis as any).__recoveryEmail || '').trim().toLowerCase();
+    if (!targetEmail) {
+      setError('No se identificó el correo electrónico. Vuelve a iniciar la recuperación.');
+      return;
+    }
+    setError(null);
     setLoading(true);
     try {
-      router.push({ pathname: '/(auth)/recover-new-password', params: { token: joined } });
-    } finally { setLoading(false); }
+      (globalThis as any).__recoveryToken = tokenValidation.cleanToken;
+      (globalThis as any).__recoveryEmail = targetEmail;
+      router.push({
+        pathname: '/(auth)/recover-new-password',
+        params: { token: tokenValidation.cleanToken, email: targetEmail },
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleResend = async () => {
     if (retrySeconds > 0) return;
-    const targetEmail = email || (globalThis as any).__recoveryEmail || '';
-    if (!targetEmail) { setResendMessage('No se encontró el correo. Vuelve a intentarlo.'); return; }
+    const targetEmail = (email || (globalThis as any).__recoveryEmail || '').trim().toLowerCase();
+    if (!targetEmail) {
+      setResendMessage('No se encontró el correo. Vuelve a intentarlo.');
+      return;
+    }
     setResending(true);
     setResendMessage('');
     try {
       await apiClient.post('/api/auth/forgot-password', { email: targetEmail });
+      (globalThis as any).__recoveryEmail = targetEmail;
       setResendMessage('Código reenviado. Revisa tu correo.');
     } catch (err: any) {
       if (err.response?.status === 429) {
         const d = err.response.data || {};
         const retryAfter = Number(d.retryAfterSeconds) || parseInt(err.response?.headers?.['retry-after'], 10) || 60;
         setRetrySeconds(retryAfter);
-        setResendMessage('Demasiadas solicitudes. Espera antes de reintentar.');
+        setResendMessage(t('auth.tooManyRequests') || 'Demasiadas solicitudes. Espera antes de reintentar.');
       } else {
-        setResendMessage('No fue posible reenviar el código.');
+        setResendMessage(mapRecoveryApiError(err, 'No fue posible reenviar el código.'));
       }
-    } finally { setResending(false); }
+    } finally {
+      setResending(false);
+    }
   };
 
   return (
