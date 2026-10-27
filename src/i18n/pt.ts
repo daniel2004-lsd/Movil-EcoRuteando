@@ -519,9 +519,6 @@ export default {
         passwordMedium: 'Senha média',
         passwordStrongLabel: 'Senha forte',
 
-        // SOCIAL
-        orContinueWith: 'Ou continue com',
-
         // AUTH SCREENS (login / register / recover / verify-code)
         loggingIn: 'Entrando...',
         loginTagline: 'Cada viagem sustentável começa com um passo',
@@ -538,7 +535,6 @@ export default {
         confirmPasswordPlaceholder: 'Repita sua senha',
         passwordMatch: 'As senhas coincidem',
         passwordMinShort: 'Mín. 8 caracteres',
-        orRegisterWith: 'Ou registre-se com',
         registering: 'Registrando...',
         recoverTitle: 'Recuperar senha',
         recoverSubtitle: 'Informe seu e-mail e enviaremos um código de verificação de 6 dígitos para redefinir sua senha.',
@@ -574,13 +570,7 @@ export default {
         emailAlreadyRegistered: 'Este e-mail já está cadastrado.',
         alreadyRegisteredTitle: 'Você já está cadastrado',
         alreadyRegisteredMsg: 'Este e-mail já tem uma conta. Deseja entrar ou reenviar o código de verificação?',
-        alreadyRegisteredOAuthMsg: 'Este e-mail já tem uma conta no EcoRuteando. Entre para continuar.',
         registerErrorFallback: 'Não foi possível registrar o usuário',
-        oauthCancelledTitle: 'Login com Google cancelado',
-        oauthCancelledMsg: 'Você não concluiu o login com o Google.',
-        oauthErrorTitle: 'Não foi possível entrar com o Google',
-        oauthNoCode: 'O Google não devolveu o código de autorização. Tente novamente.',
-        oauthNoToken: 'O Google não devolveu um token de acesso válido. Tente novamente.',
         cancel: 'Cancelar',
         errorTitle: 'Erro',
 

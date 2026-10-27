@@ -518,9 +518,6 @@ export default {
         passwordMedium: 'Mot de passe moyen',
         passwordStrongLabel: 'Mot de passe fort',
 
-        // SOCIAL
-        orContinueWith: 'Ou continuer avec',
-
         // AUTH SCREENS (login / register / recover / verify-code)
         loggingIn: 'Connexion en cours...',
         loginTagline: 'Chaque trajet durable commence par un pas',
@@ -537,7 +534,6 @@ export default {
         confirmPasswordPlaceholder: 'Répétez votre mot de passe',
         passwordMatch: 'Les mots de passe correspondent',
         passwordMinShort: 'Min. 8 caractères',
-        orRegisterWith: "Ou inscrivez-vous avec",
         registering: 'Inscription en cours...',
         recoverTitle: 'Récupérer le mot de passe',
         recoverSubtitle: 'Saisissez votre e-mail et nous vous enverrons un code de vérification à 6 chiffres pour réinitialiser votre mot de passe.',
@@ -573,13 +569,7 @@ export default {
         emailAlreadyRegistered: 'Cet e-mail est déjà enregistré.',
         alreadyRegisteredTitle: 'Vous êtes déjà inscrit',
         alreadyRegisteredMsg: 'Cet e-mail possède déjà un compte. Voulez-vous vous connecter ou renvoyer le code de vérification ?',
-        alreadyRegisteredOAuthMsg: 'Cet e-mail possède déjà un compte EcoRuteando. Connectez-vous pour continuer.',
         registerErrorFallback: 'Impossible d’enregistrer l’utilisateur',
-        oauthCancelledTitle: 'Connexion Google annulée',
-        oauthCancelledMsg: 'Vous n’avez pas terminé la connexion avec Google.',
-        oauthErrorTitle: 'Impossible de se connecter avec Google',
-        oauthNoCode: 'Google n’a pas renvoyé le code d’autorisation. Veuillez réessayer.',
-        oauthNoToken: 'Google n’a pas renvoyé un jeton d’accès valide. Veuillez réessayer.',
         cancel: 'Annuler',
         errorTitle: 'Erreur',
 

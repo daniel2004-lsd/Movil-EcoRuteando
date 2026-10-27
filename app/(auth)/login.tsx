@@ -1,22 +1,15 @@
-import { Dialog } from '../../src/shared/components/ui/AppDialog';
 import {  View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, TextInput, Modal, ActivityIndicator  } from 'react-native';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { SocialBtn } from '../../src/shared/components/auth/SocialBtn';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useAuth } from '../../src/shared/store/AuthContext';
 import apiClient, { API_BASE } from '../../src/shared/services/apiClient';
 import { validateApiUrl } from '../../src/shared/utils/urlValidation';
 import * as SecureStore from '../../src/shared/services/keyStorage';
-import * as WebBrowser from 'expo-web-browser';
-import { decodeJwtPayload } from '../../src/shared/utils/jwt';
-import * as Crypto from 'expo-crypto';
-
-WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -100,49 +93,6 @@ export default function LoginScreen() {
     setError('');
   };
 
-
-  const handleGoogleLogin = async () => {
-    const redirectUri = 'com.ecoruteando.mobile:/auth/callback';
-    try {
-      const clientId = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '';
-      const bytes = await Crypto.getRandomBytesAsync(64);
-      const verifier = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-      const b64 = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, verifier, { encoding: Crypto.CryptoEncoding.BASE64 });
-      const challenge = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('openid email profile')}&response_type=code&code_challenge=${challenge}&code_challenge_method=S256&state=google`;
-      const result:any = await WebBrowser.openAuthSessionAsync(url, redirectUri);
-      if (result?.type !== 'success') { console.warn('[OAuth-Google] cancelado, type=', result?.type);
-      Dialog.alert(t('auth.oauthCancelledTitle'), t('auth.oauthCancelledMsg'), {
-        tone: 'info',
-        icon: 'hand-left',
-      }); return; }
-      const mc = String(result.url || '').match(/[?&]code=([^&]+)/);
-      if (!mc) { console.warn('[OAuth-Google] sin code_verifier/authorization code');
-      Dialog.alert(t('auth.oauthErrorTitle'), t('auth.oauthNoCode'), {
-        tone: 'error',
-      }); return; }
-      const body = 'client_id='+encodeURIComponent(clientId)+'&code='+encodeURIComponent(decodeURIComponent(mc[1]))+'&redirect_uri='+encodeURIComponent(redirectUri)+'&grant_type=authorization_code&code_verifier='+encodeURIComponent(verifier);
-      const tr = await fetch('https://oauth2.googleapis.com/token', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
-      const tj:any = await tr.json().catch(() => ({}));
-      const tok = tj.access_token;
-      if (!tok) { console.warn('[OAuth-Google] sin access_token:', tj.error_description || tj.error || tr.status);
-      Dialog.alert(t('auth.oauthErrorTitle'), t('auth.oauthNoToken'), {
-        tone: 'error',
-      }); return; }
-      const idp = (tj.id_token ? decodeJwtPayload(tj.id_token) : null) || {};
-      const {data}=await apiClient.post('/api/auth/oauth/login',{provider:'google',accessToken:tok});
-      const emailForSign = (typeof idp.email === 'string' ? idp.email.trim() : '') || 'oauth@google.com';
-      const firstNameForSign = (typeof idp.given_name === 'string' ? idp.given_name.trim() : '');
-      await signIn({accessToken:data.accessToken,refreshToken:data.refreshToken,email: emailForSign, firstName: firstNameForSign});
-      router.replace('/(tabs)');
-    } catch(e:any) {
-      console.warn('[OAuth-Google] excepción:', e?.message || e);
-      const errMsg = e?.response?.data?.detail || e?.response?.data?.message || e?.message || t('auth.oauthNoToken');
-      Dialog.alert(t('auth.oauthErrorTitle'), errMsg, {
-        tone: 'error',
-      });
-    }
-  };
 
   useEffect(() => {
     if (retrySeconds <= 0) return;
@@ -229,12 +179,6 @@ export default function LoginScreen() {
             <TouchableOpacity onPress={()=>router.push('/(auth)/recover')} style={s.forgot}><Text style={[s.forgotText, isDark && {color:'#34D399'}]}>{t('auth.forgotPassword')}</Text></TouchableOpacity>
 
             <TouchableOpacity onPress={handleLogin} disabled={loading || retrySeconds>0} style={[s.primaryBtn, (loading||retrySeconds>0) && {opacity:0.5}]}><Text style={s.primaryText}>{loading ? t('auth.loggingIn') : t('auth.loginButton')}</Text></TouchableOpacity>
-
-            <View style={s.divider}><View style={[s.divLine, isDark && {backgroundColor:'#26383D'}]} /><Text style={[s.divText, isDark && {color:'#94a3b8'}]}>{t('auth.orContinueWith')}</Text><View style={[s.divLine, isDark && {backgroundColor:'#26383D'}]} /></View>
-
-            <View style={s.socialRow}>
-              <SocialBtn icon="logo-google" color="#EA4335" label="Google" disabled={retrySeconds>0} onPress={handleGoogleLogin} />
-            </View>
 
             <View style={s.registerRow}><Text style={[s.registerText, isDark && {color:'#94a3b8'}]}>{t('auth.noAccount')}</Text><TouchableOpacity onPress={()=>router.push('/(auth)/register')}><Text style={[s.registerLink, isDark && {color:'#34D399'}]}>{' '}{t('auth.registerHere')}</Text></TouchableOpacity></View>
           </View>
@@ -359,10 +303,6 @@ const s = StyleSheet.create({
   forgotText:{fontSize:10,color:'#059669'},
   primaryBtn:{width:'100%',backgroundColor:'#059669',borderRadius:8,paddingVertical:10,alignItems:'center',marginTop:14},
   primaryText:{color:'#fff',fontWeight:'600',fontSize:14},
-  divider:{flexDirection:'row',alignItems:'center',gap:8,marginVertical:16},
-  divLine:{flex:1,height:1,backgroundColor:'#e5e7eb'},
-  divText:{fontSize:10,color:'#9ca3af',textTransform:'uppercase',letterSpacing:0.5},
-  socialRow:{flexDirection:'row',gap:8},
   registerRow:{flexDirection:'row',justifyContent:'center',marginTop:16,borderTopWidth:1,borderTopColor:'#f3f4f6',paddingTop:12},
   registerText:{fontSize:12,color:'#9ca3af'},
   registerLink:{fontSize:12,color:'#059669',fontWeight:'500'},

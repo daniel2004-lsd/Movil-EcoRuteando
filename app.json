@@ -44,7 +44,6 @@
       "expo-secure-store",
       "expo-splash-screen",
       "expo-status-bar",
-      "expo-web-browser",
       [
         "expo-notifications",
         {
