@@ -10,6 +10,7 @@ import { useLanguage } from '../../src/shared/store/LanguageContext';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useAuth } from '../../src/shared/store/AuthContext';
 import apiClient, { API_BASE } from '../../src/shared/services/apiClient';
+import { validateApiUrl } from '../../src/shared/utils/urlValidation';
 import * as SecureStore from '../../src/shared/services/keyStorage';
 import * as WebBrowser from 'expo-web-browser';
 import { decodeJwtPayload } from '../../src/shared/utils/jwt';
@@ -47,7 +48,14 @@ export default function LoginScreen() {
   };
 
   const handleTestConnection = async (urlToTest?: string) => {
-    const target = (urlToTest || serverUrlInput || API_BASE).trim().replace(/\/+$/, '');
+    const rawTarget = (urlToTest || serverUrlInput || API_BASE).trim().replace(/\/+$/, '');
+    const validation = validateApiUrl(rawTarget, !__DEV__);
+    if (!validation.isValid || !validation.normalizedUrl) {
+      setTestStatus('error');
+      setTestMessage(`❌ ${validation.error || 'La URL ingresada no es válida.'}`);
+      return;
+    }
+    const target = validation.normalizedUrl;
     setTestStatus('testing');
     setTestMessage('Probando conexión al servidor...');
     try {
@@ -71,7 +79,13 @@ export default function LoginScreen() {
   const handleSaveServerUrl = async () => {
     const cleaned = serverUrlInput.trim().replace(/\/+$/, '');
     if (cleaned) {
-      await SecureStore.setItemAsync('customApiUrl', cleaned);
+      const validation = validateApiUrl(cleaned, !__DEV__);
+      if (!validation.isValid || !validation.normalizedUrl) {
+        setTestStatus('error');
+        setTestMessage(`❌ ${validation.error || 'URL no permitida.'}`);
+        return;
+      }
+      await SecureStore.setItemAsync('customApiUrl', validation.normalizedUrl);
     } else {
       await SecureStore.deleteItemAsync('customApiUrl');
     }
@@ -148,31 +162,20 @@ export default function LoginScreen() {
       if (data.requiresEmailVerification) { router.push('/(auth)/verify-code'); return; }
       await signIn({ accessToken: data.accessToken, refreshToken: data.refreshToken, email: email.trim() });
       router.replace('/(tabs)');
-    } catch (err:any) {
-      // Si ocurre error de red, intentar automáticamente con las IPs locales de respaldo
-      if (!err?.response && (err.message?.includes('Network') || err.message?.includes('network') || !err.status)) {
-        const fallbacks = [
-          'https://feeding-irrigation-milk-log.trycloudflare.com',
-          'http://10.3.234.116:3007',
-          'http://10.3.234.116:5124',
-        ];
-        for (const fbUrl of fallbacks) {
-          try {
-            const { data: fbData } = await axios.post(`${fbUrl}/api/auth/login`, { email: email.trim(), password: password.trim() }, { timeout: 3500 });
-            await SecureStore.setItemAsync('customApiUrl', fbUrl);
-            if (fbData.requiresTwoFactor) { router.push('/(auth)/verify-code'); return; }
-            if (fbData.requiresEmailVerification) { router.push('/(auth)/verify-code'); return; }
-            await signIn({ accessToken: fbData.accessToken, refreshToken: fbData.refreshToken, email: email.trim() });
-            router.replace('/(tabs)');
-            return;
-          } catch (_) {}
-        }
-      }
+    } catch (err: any) {
       const d = err?.response?.data || {};
-      const retryAfter = Number(d.retryAfterSeconds) || parseInt(err?.response?.headers?.['retry-after'],10) || 0;
-      if (retryAfter > 0) { setRetrySeconds(retryAfter); setError(d.detail || t('auth.tooManyAttempts')); }
-      else setError(d.detail || d.message || err.message || t('auth.invalidCredentials'));
-    } finally { setLoading(false); }
+      const retryAfter = Number(d.retryAfterSeconds) || parseInt(err?.response?.headers?.['retry-after'], 10) || 0;
+      if (retryAfter > 0) {
+        setRetrySeconds(retryAfter);
+        setError(d.detail || t('auth.tooManyAttempts'));
+      } else if (!err?.response && (err.message?.includes('Network') || err.message?.includes('network') || !err.status)) {
+        setError('No se pudo establecer conexión con el servidor. Verifica tu conexión a internet o el servidor configurado.');
+      } else {
+        setError(d.detail || d.message || err.message || t('auth.invalidCredentials'));
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -250,51 +253,43 @@ export default function LoginScreen() {
             <TextInput
               value={serverUrlInput}
               onChangeText={setServerUrlInput}
-              placeholder="https://... o http://10.3.234.116:5124"
+              placeholder="https://ecoruteando-backend.onrender.com"
               placeholderTextColor={isDark ? '#64748b' : '#9ca3af'}
               autoCapitalize="none"
               autoCorrect={false}
               style={[s.input, isDark && s.inputDark, {marginVertical: 10}]}
             />
 
-            {/* Presets rápidos */}
+            {/* Presets seguros */}
             <Text style={{fontSize: 11, fontWeight: '600', color: isDark ? '#94a3b8' : '#6b7280', marginBottom: 6}}>
-              Servidores disponibles:
+              Servidores autorizados:
             </Text>
             <View style={{flexDirection: 'row', gap: 6, marginBottom: 12, flexWrap: 'wrap'}}>
               <TouchableOpacity
                 onPress={() => {
-                  setServerUrlInput('https://feeding-irrigation-milk-log.trycloudflare.com');
-                  handleTestConnection('https://feeding-irrigation-milk-log.trycloudflare.com');
+                  setServerUrlInput(API_BASE);
+                  handleTestConnection(API_BASE);
                 }}
                 style={{paddingVertical: 5, paddingHorizontal: 10, borderRadius: 6, backgroundColor: isDark ? '#1e293b' : '#ecfdf5', borderWidth: 1, borderColor: '#10b981'}}
               >
                 <Text style={{fontSize: 11, color: isDark ? '#34D399' : '#047857', fontWeight: '600'}}>
-                  🌐 Cloudflare HTTPS
+                  🛡️ Producción Oficial (HTTPS)
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  setServerUrlInput('http://10.3.234.116:3007');
-                  handleTestConnection('http://10.3.234.116:3007');
-                }}
-                style={{paddingVertical: 5, paddingHorizontal: 10, borderRadius: 6, backgroundColor: isDark ? '#1e293b' : '#eff6ff', borderWidth: 1, borderColor: '#3b82f6'}}
-              >
-                <Text style={{fontSize: 11, color: isDark ? '#60a5fa' : '#1d4ed8', fontWeight: '600'}}>
-                  📶 WiFi Local (3007)
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  setServerUrlInput('http://10.90.222.239:5124');
-                  handleTestConnection('http://10.90.222.239:5124');
-                }}
-                style={{paddingVertical: 5, paddingHorizontal: 10, borderRadius: 6, backgroundColor: isDark ? '#1e293b' : '#faf5ff', borderWidth: 1, borderColor: '#a855f7'}}
-              >
-                <Text style={{fontSize: 11, color: isDark ? '#c084fc' : '#7e22ce', fontWeight: '600'}}>
-                  ⚡ WiFi Directo (5124)
-                </Text>
-              </TouchableOpacity>
+              {__DEV__ && (
+                <TouchableOpacity
+                  onPress={() => {
+                    const localDev = 'http://localhost:5124';
+                    setServerUrlInput(localDev);
+                    handleTestConnection(localDev);
+                  }}
+                  style={{paddingVertical: 5, paddingHorizontal: 10, borderRadius: 6, backgroundColor: isDark ? '#1e293b' : '#eff6ff', borderWidth: 1, borderColor: '#3b82f6'}}
+                >
+                  <Text style={{fontSize: 11, color: isDark ? '#60a5fa' : '#1d4ed8', fontWeight: '600'}}>
+                    🔧 Localhost Dev (5124)
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Mensaje de prueba */}

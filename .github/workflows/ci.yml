@@ -1,0 +1,40 @@
+name: Mobile CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - qa
+      - main
+  push:
+    branches:
+      - develop
+      - qa
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Typecheck & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify TypeScript types
+        run: npm run typecheck
+
+      - name: Run unit tests
+        run: npm test
