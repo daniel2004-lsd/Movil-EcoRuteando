@@ -81,6 +81,29 @@ def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBu
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// Inyección dinámica y segura de la clave de Google Maps Platform (sin almacenar secretos en Git)
+def resolveGoogleMapsApiKey() {
+    def key = System.getenv("EXPO_PUBLIC_GOOGLE_MAPS_KEY") ?:
+              System.getenv("MAPS_API_KEY") ?:
+              (project.findProperty("EXPO_PUBLIC_GOOGLE_MAPS_KEY") ?:
+              (project.findProperty("MAPS_API_KEY") ?: ""))
+    if (!key) {
+        def envFile = file("${rootDir}/../.env")
+        if (envFile.exists()) {
+            envFile.eachLine { line ->
+                def matcher = (line =~ /^\s*EXPO_PUBLIC_GOOGLE_MAPS_KEY\s*=\s*(.*)\s*$/)
+                if (matcher.matches()) {
+                    key = matcher[0][1].trim().replaceAll(/^["']|["']$/, '')
+                }
+            }
+        }
+    }
+    if (!key) {
+        logger.warn("[GoogleMaps] ADVERTENCIA: No se detectó clave de Google Maps (EXPO_PUBLIC_GOOGLE_MAPS_KEY / MAPS_API_KEY). El mapa nativo no cargará teselas.")
+    }
+    return key ?: ""
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
 
@@ -95,7 +118,7 @@ android {
         versionName "1.0.7"
 
         manifestPlaceholders = [
-            MAPS_API_KEY: "[REDACTED_GOOGLE_MAPS_KEY]"
+            MAPS_API_KEY: resolveGoogleMapsApiKey()
         ]
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
@@ -109,15 +132,35 @@ android {
             v1SigningEnabled true
             v2SigningEnabled true
         }
+        release {
+            def storeFilePath = System.getenv("RELEASE_STORE_FILE") ?: (project.findProperty("RELEASE_STORE_FILE") ?: "")
+            def storePasswordVal = System.getenv("RELEASE_STORE_PASSWORD") ?: (project.findProperty("RELEASE_STORE_PASSWORD") ?: "")
+            def keyAliasVal = System.getenv("RELEASE_KEY_ALIAS") ?: (project.findProperty("RELEASE_KEY_ALIAS") ?: "")
+            def keyPasswordVal = System.getenv("RELEASE_KEY_PASSWORD") ?: (project.findProperty("RELEASE_KEY_PASSWORD") ?: "")
+
+            if (storeFilePath && file(storeFilePath).exists()) {
+                storeFile file(storeFilePath)
+                storePassword storePasswordVal
+                keyAlias keyAliasVal
+                keyPassword keyPasswordVal
+                v1SigningEnabled true
+                v2SigningEnabled true
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // SEGURIDAD (H-20): NUNCA utilizar signingConfigs.debug en compilaciones release.
+            // Si existen credenciales de release válidas en el entorno, se firma con release.
+            // Si no existen credenciales de release, signingConfig queda en null (no se firma con debug.keystore).
+            if (signingConfigs.release.storeFile != null) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig null
+            }
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
@@ -182,5 +225,30 @@ dependencies {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
+    }
+}
+
+// SEGURIDAD (H-20): Validacion de firma de produccion en el grafo de tareas de Gradle
+gradle.taskGraph.whenReady { taskGraph ->
+    def isReleaseBuild = taskGraph.allTasks.any { task ->
+        task.name.equalsIgnoreCase("assembleRelease") || task.name.equalsIgnoreCase("bundleRelease")
+    }
+    if (isReleaseBuild && android.signingConfigs.release.storeFile == null) {
+        def requireSigning = (System.getenv("REQUIRE_RELEASE_SIGNING")?.toBoolean() ?: false) ||
+                             (project.findProperty("REQUIRE_RELEASE_SIGNING")?.toString()?.toBoolean() ?: false)
+        if (requireSigning) {
+            throw new GradleException(
+                "[H-20] ERROR CRÍTICO: La compilación de release exige firma de producción (REQUIRE_RELEASE_SIGNING=true), " +
+                "pero faltan las credenciales (RELEASE_STORE_FILE / RELEASE_STORE_PASSWORD). " +
+                "Se ha bloqueado la generación del artefacto release."
+            )
+        } else {
+            logger.warn("==========================================================================")
+            logger.warn("[H-20] ADVERTENCIA DE SEGURIDAD: Credenciales de produccion no configuradas.")
+            logger.warn("El artefacto release generado estara NO FIRMADO (unsigned) y no es apto para distribucion.")
+            logger.warn("Para firmar configure: RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD.")
+            logger.warn("Se ha impedido el uso inseguro de la debug.keystore en compilaciones release.")
+            logger.warn("==========================================================================")
+        }
     }
 }
