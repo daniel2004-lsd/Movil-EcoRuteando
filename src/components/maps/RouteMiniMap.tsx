@@ -13,7 +13,7 @@ interface RouteMiniMapProps {
 }
 
 const GOOGLE_MAPS_API_KEY =
-  process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '[REDACTED_GOOGLE_MAPS_KEY]';
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '';
 
 export function decodePolyline(encoded: string): { latitude: number; longitude: number }[] {
   const points: { latitude: number; longitude: number }[] = [];
@@ -86,6 +86,8 @@ export function getStaticMapUrl({
       // Ignorar fallo de decodificación
     }
   }
+
+  if (!GOOGLE_MAPS_API_KEY) return null;
 
   const validStart = sLatitude != null && sLongitude != null && Number.isFinite(Number(sLatitude)) && Number.isFinite(Number(sLongitude));
   if (!validStart) return null;
