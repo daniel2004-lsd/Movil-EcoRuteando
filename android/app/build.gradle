@@ -82,13 +82,38 @@ def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBu
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 // Inyección dinámica y segura de la clave de Google Maps Platform (sin almacenar secretos en Git)
-def resolveGoogleMapsApiKey() {
+def getGoogleMapsApiKey() {
     def key = System.getenv("EXPO_PUBLIC_GOOGLE_MAPS_KEY") ?:
               System.getenv("MAPS_API_KEY") ?:
               (project.findProperty("EXPO_PUBLIC_GOOGLE_MAPS_KEY") ?:
               (project.findProperty("MAPS_API_KEY") ?: ""))
-    if (!key) {
-        def envFile = file("${rootDir}/../.env")
+
+    if (!key || key.toString().trim().isEmpty()) {
+        def signingPropertiesFile = rootProject.file("release-signing.properties")
+        if (signingPropertiesFile.exists()) {
+            Properties signingProps = new Properties()
+            signingProps.load(new FileInputStream(signingPropertiesFile))
+            def signingKey = signingProps.getProperty("EXPO_PUBLIC_GOOGLE_MAPS_KEY")
+            if (signingKey && !signingKey.trim().isEmpty()) {
+                key = signingKey.trim()
+            }
+        }
+    }
+
+    if (!key || key.toString().trim().isEmpty()) {
+        def envLocalFile = rootProject.file("../.env.local")
+        if (envLocalFile.exists()) {
+            envLocalFile.eachLine { line ->
+                def matcher = (line =~ /^\s*EXPO_PUBLIC_GOOGLE_MAPS_KEY\s*=\s*(.*)\s*$/)
+                if (matcher.matches()) {
+                    key = matcher[0][1].trim().replaceAll(/^["']|["']$/, '')
+                }
+            }
+        }
+    }
+
+    if (!key || key.toString().trim().isEmpty()) {
+        def envFile = rootProject.file("../.env")
         if (envFile.exists()) {
             envFile.eachLine { line ->
                 def matcher = (line =~ /^\s*EXPO_PUBLIC_GOOGLE_MAPS_KEY\s*=\s*(.*)\s*$/)
@@ -98,10 +123,15 @@ def resolveGoogleMapsApiKey() {
             }
         }
     }
-    if (!key) {
+
+    if (!key || key.toString().trim().isEmpty()) {
         logger.warn("[GoogleMaps] ADVERTENCIA: No se detectó clave de Google Maps (EXPO_PUBLIC_GOOGLE_MAPS_KEY / MAPS_API_KEY). El mapa nativo no cargará teselas.")
     }
     return key ?: ""
+}
+
+def resolveGoogleMapsApiKey() {
+    return getGoogleMapsApiKey()
 }
 
 android {
@@ -114,11 +144,11 @@ android {
         applicationId 'com.ecoruteando.mobile'
         minSdkVersion 24
         targetSdkVersion 34
-        versionCode 8
-        versionName "1.0.7"
+        versionCode 10
+        versionName "1.0.9"
 
         manifestPlaceholders = [
-            MAPS_API_KEY: resolveGoogleMapsApiKey()
+            MAPS_API_KEY: getGoogleMapsApiKey()
         ]
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
@@ -133,10 +163,33 @@ android {
             v2SigningEnabled true
         }
         release {
-            def storeFilePath = System.getenv("RELEASE_STORE_FILE") ?: (project.findProperty("RELEASE_STORE_FILE") ?: "")
-            def storePasswordVal = System.getenv("RELEASE_STORE_PASSWORD") ?: (project.findProperty("RELEASE_STORE_PASSWORD") ?: "")
-            def keyAliasVal = System.getenv("RELEASE_KEY_ALIAS") ?: (project.findProperty("RELEASE_KEY_ALIAS") ?: "")
-            def keyPasswordVal = System.getenv("RELEASE_KEY_PASSWORD") ?: (project.findProperty("RELEASE_KEY_PASSWORD") ?: "")
+            // Cargar credenciales desde release-signing.properties local o variables de entorno
+            def signingPropertiesFile = rootProject.file("release-signing.properties")
+            Properties signingProps = new Properties()
+            if (signingPropertiesFile.exists()) {
+                signingProps.load(new FileInputStream(signingPropertiesFile))
+            }
+
+            def storeFilePath = signingProps.getProperty('ECORUTEANDO_RELEASE_STORE_FILE')
+                ?: project.findProperty('ECORUTEANDO_RELEASE_STORE_FILE')
+                ?: System.getenv('ECORUTEANDO_RELEASE_STORE_FILE')
+                ?: project.findProperty('RELEASE_STORE_FILE')
+                ?: System.getenv('RELEASE_STORE_FILE')
+            def storePasswordVal = signingProps.getProperty('ECORUTEANDO_RELEASE_STORE_PASSWORD')
+                ?: project.findProperty('ECORUTEANDO_RELEASE_STORE_PASSWORD')
+                ?: System.getenv('ECORUTEANDO_RELEASE_STORE_PASSWORD')
+                ?: project.findProperty('RELEASE_STORE_PASSWORD')
+                ?: System.getenv('RELEASE_STORE_PASSWORD')
+            def keyAliasVal = signingProps.getProperty('ECORUTEANDO_RELEASE_KEY_ALIAS')
+                ?: project.findProperty('ECORUTEANDO_RELEASE_KEY_ALIAS')
+                ?: System.getenv('ECORUTEANDO_RELEASE_KEY_ALIAS')
+                ?: project.findProperty('RELEASE_KEY_ALIAS')
+                ?: System.getenv('RELEASE_KEY_ALIAS')
+            def keyPasswordVal = signingProps.getProperty('ECORUTEANDO_RELEASE_KEY_PASSWORD')
+                ?: project.findProperty('ECORUTEANDO_RELEASE_KEY_PASSWORD')
+                ?: System.getenv('ECORUTEANDO_RELEASE_KEY_PASSWORD')
+                ?: project.findProperty('RELEASE_KEY_PASSWORD')
+                ?: System.getenv('RELEASE_KEY_PASSWORD')
 
             if (storeFilePath && file(storeFilePath).exists()) {
                 storeFile file(storeFilePath)
@@ -228,25 +281,33 @@ dependencies {
     }
 }
 
-// SEGURIDAD (H-20): Validacion de firma de produccion en el grafo de tareas de Gradle
+// SEGURIDAD (H-20): Validación de firma de producción en el grafo de tareas de Gradle
 gradle.taskGraph.whenReady { taskGraph ->
     def isReleaseBuild = taskGraph.allTasks.any { task ->
         task.name.equalsIgnoreCase("assembleRelease") || task.name.equalsIgnoreCase("bundleRelease")
     }
-    if (isReleaseBuild && android.signingConfigs.release.storeFile == null) {
+    def releaseConfig = android.signingConfigs.findByName("release")
+    def hasReleaseKey = releaseConfig && releaseConfig.storeFile && releaseConfig.storeFile.exists()
+
+    if (isReleaseBuild && !hasReleaseKey) {
         def requireSigning = (System.getenv("REQUIRE_RELEASE_SIGNING")?.toBoolean() ?: false) ||
                              (project.findProperty("REQUIRE_RELEASE_SIGNING")?.toString()?.toBoolean() ?: false)
         if (requireSigning) {
             throw new GradleException(
-                "[H-20] ERROR CRÍTICO: La compilación de release exige firma de producción (REQUIRE_RELEASE_SIGNING=true), " +
-                "pero faltan las credenciales (RELEASE_STORE_FILE / RELEASE_STORE_PASSWORD). " +
-                "Se ha bloqueado la generación del artefacto release."
+                "\n❌ [H-20] ERROR CRÍTICO: La compilación de release exige firma de producción (REQUIRE_RELEASE_SIGNING=true), " +
+                "pero faltan las credenciales válidas.\n" +
+                "Para compilar release, cree el archivo android/release-signing.properties (o defina las variables de entorno):\n" +
+                "  ECORUTEANDO_RELEASE_STORE_FILE (o RELEASE_STORE_FILE)\n" +
+                "  ECORUTEANDO_RELEASE_STORE_PASSWORD (o RELEASE_STORE_PASSWORD)\n" +
+                "  ECORUTEANDO_RELEASE_KEY_ALIAS (o RELEASE_KEY_ALIAS)\n" +
+                "  ECORUTEANDO_RELEASE_KEY_PASSWORD (o RELEASE_KEY_PASSWORD)\n" +
+                "Consulte la plantilla en android/release-signing.properties.example.\n"
             )
         } else {
             logger.warn("==========================================================================")
             logger.warn("[H-20] ADVERTENCIA DE SEGURIDAD: Credenciales de produccion no configuradas.")
             logger.warn("El artefacto release generado estara NO FIRMADO (unsigned) y no es apto para distribucion.")
-            logger.warn("Para firmar configure: RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD.")
+            logger.warn("Para firmar configure: android/release-signing.properties o RELEASE_STORE_FILE / ECORUTEANDO_RELEASE_STORE_FILE.")
             logger.warn("Se ha impedido el uso inseguro de la debug.keystore en compilaciones release.")
             logger.warn("==========================================================================")
         }

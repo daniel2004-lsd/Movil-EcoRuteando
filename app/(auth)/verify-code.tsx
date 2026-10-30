@@ -27,7 +27,7 @@ export default function VerifyCodeScreen() {
   const router = useRouter();
   const { theme } = useThemeMode();
   const { t } = useLanguage();
-  const { setAuth } = useAuth();
+  const { signIn } = useAuth();
   const isDark = theme === 'dark';
 
   // email que viene desde el registro: /verify-code?email=algo@mail.com
@@ -82,18 +82,24 @@ export default function VerifyCodeScreen() {
     setError(null);
     setLoading(true);
     try {
-      await apiClient.post('/api/auth/verify-email', { code: joined });
+      const res = await apiClient.post('/api/auth/verify-email', { code: joined });
+      const data = res?.data;
+      const accessToken = data?.token || data?.accessToken;
+      const refreshToken = data?.refreshToken;
 
-      if (email) {
-        setAuth({
+      if (accessToken && refreshToken && email) {
+        await signIn({
+          accessToken,
+          refreshToken,
           email: String(email),
-          role: 'user',
-          userId: null,
-          firstName: null,
+          role: data?.role || 'user',
+          userId: data?.userId,
+          firstName: data?.firstName,
         });
+        router.replace('/(tabs)');
+      } else {
+        router.replace('/(auth)/login');
       }
-
-      router.replace('/(tabs)');
     } catch (err: any) {
       setError(err?.response?.data?.detail || err?.response?.data?.message || err?.message || t('auth.codeInvalid'));
     } finally {

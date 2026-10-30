@@ -6,7 +6,7 @@
       "ecoruteando",
       "com.ecoruteando.mobile"
     ],
-    "version": "1.0.7",
+    "version": "1.0.9",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "splash": {
@@ -24,7 +24,7 @@
     ],
     "android": {
       "package": "com.ecoruteando.mobile",
-      "versionCode": 8,
+      "versionCode": 10,
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#e8f3ec"
@@ -33,7 +33,12 @@
         "googleMaps": {
           "apiKey": "${MAPS_API_KEY}"
         }
-      }
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro"
@@ -44,7 +49,6 @@
       "expo-secure-store",
       "expo-splash-screen",
       "expo-status-bar",
-      "expo-web-browser",
       [
         "expo-notifications",
         {
@@ -62,6 +66,13 @@
         }
       ],
       "expo-sharing"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "01c08b06-6601-4eff-bf51-5f2657fda9e7"
+      }
+    },
+    "owner": "danielsalazarvargas95"
   }
 }
