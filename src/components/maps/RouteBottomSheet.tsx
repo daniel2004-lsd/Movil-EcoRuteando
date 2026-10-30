@@ -50,7 +50,6 @@ interface RouteBottomSheetProps {
   onModePress?: (mode: string) => void;
   bottomInset?: number;
   contentHeight?: number;
-  isGuest?: boolean;
 }
 
 const snapPoints = ['25%', '50%', '90%'];
@@ -98,7 +97,6 @@ export function RouteBottomSheet({
   onModePress,
   bottomInset = 0,
   contentHeight,
-  isGuest = false,
 }: RouteBottomSheetProps) {
   const { t } = useLanguage();
   const handleModePress = (mode: string) => {
@@ -294,8 +292,8 @@ export function RouteBottomSheet({
           </View>
         )}
 
-        {/* Acciones rápidas estilo Google Maps: Agregar paradas / Compartir / Guardar (solo usuarios registrados) */}
-        {!isGuest && !activeTripId && (onAddStop || onShare || onSave || onToggleFavorite) && (
+        {/* Acciones rápidas estilo Google Maps: Agregar paradas / Compartir / Guardar */}
+        {!activeTripId && (onAddStop || onShare || onSave || onToggleFavorite) && (
           <View style={styles.actionRow}>
             {onAddStop && (
               <TouchableOpacity style={styles.actionItem} onPress={onAddStop} activeOpacity={0.7}>
@@ -344,33 +342,10 @@ export function RouteBottomSheet({
           </View>
         )}
 
-        {isGuest && (
-          <View style={{marginHorizontal: 20, marginVertical: 8, padding: 10, backgroundColor: '#f0fdf4', borderRadius: 10, borderWidth: 1, borderColor: '#bbf7d0', flexDirection: 'row', alignItems: 'center', gap: 8}}>
-            <Ionicons name="leaf-outline" size={18} color="#16a34a" />
-            <Text style={{flex: 1, fontSize: 11, color: '#166534', fontFamily: 'Times New Roman'}}>
-              Modo Invitado: cálculo de ruta disponible. Para guardar y navegar en tiempo real, inicia sesión.
-            </Text>
-          </View>
-        )}
-
         {/* Trip error + acciones: fijos abajo, fuera del área scrolleable */}
         {tripError ? <Text style={styles.tripError}>{tripError}</Text> : null}
         <View style={styles.actions}>
-            {isGuest ? (
-              <View style={{flexDirection: 'row', gap: 10, width: '100%'}}>
-                <TouchableOpacity
-                  style={[styles.primaryBtn, {backgroundColor: '#059669', flex: 1}]}
-                  onPress={() => onStartTrip?.()}
-                  activeOpacity={0.9}
-                >
-                  <Ionicons name="log-in-outline" size={20} color="#fff" />
-                  <Text style={styles.primaryBtnText}>Iniciar sesión</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryBtn} onPress={onClose} activeOpacity={0.9}>
-                  <Text style={styles.secondaryBtnText}>{t('auth.cancel')}</Text>
-                </TouchableOpacity>
-              </View>
-            ) : activeTripId ? (
+            {activeTripId ? (
               <>
                 <View style={styles.inProgressChip}>
                   <View style={styles.inProgressDot} />
