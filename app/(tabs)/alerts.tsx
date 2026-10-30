@@ -15,7 +15,6 @@ import * as Location from 'expo-location';
 import { useAuth } from '../../src/shared/store/AuthContext';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
-import { AccountRequired } from '../../src/shared/components/ui/AccountRequired';
 import {
   checkAlertsAt,
   ensureNotificationPermission,
@@ -45,8 +44,6 @@ export default function AlertsScreen() {
   const { theme } = useThemeMode();
   const { t, lang } = useLanguage();
   const isDark = theme === 'dark';
-
-  const isGuest = !!auth.guest;
 
   const [alerts, setAlerts] = useState<ClimateAlert[]>([]);
   const [weather, setWeather] = useState<any | null>(null);
@@ -100,12 +97,8 @@ export default function AlertsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (isGuest) {
-        setLoading(false);
-        return;
-      }
       fetchAlerts();
-    }, [fetchAlerts, isGuest])
+    }, [fetchAlerts])
   );
 
   const severityLabel = (sev?: string) => {
@@ -174,11 +167,7 @@ export default function AlertsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        {isGuest ? (
-          <AccountRequired action={t('alerts.title')} />
-        ) : (
-          <>
-            {/* Tarjeta del clima actual — como la web */}
+        {/* Tarjeta del clima actual — como la web */}
             {weather ? (
               <View style={[s.card, isDark && s.cardDark]}>
                 <View style={s.weatherRow}>
@@ -373,8 +362,6 @@ export default function AlertsScreen() {
                 })
               )}
             </View>
-          </>
-        )}
       </ScrollView>
     </View>
   );
