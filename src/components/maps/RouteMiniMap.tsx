@@ -87,6 +87,8 @@ export function getStaticMapUrl({
     }
   }
 
+  if (!GOOGLE_MAPS_API_KEY) return null;
+
   const validStart = sLatitude != null && sLongitude != null && Number.isFinite(Number(sLatitude)) && Number.isFinite(Number(sLongitude));
   if (!validStart) return null;
 

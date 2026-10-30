@@ -41,17 +41,27 @@ export async function getExpoPushToken(): Promise<string | null> {
  * Registra o actualiza el push token del dispositivo en el backend (H-12).
  * Consume POST /api/notifications/device-token.
  * La identidad del usuario se valida mediante el JWT Bearer token transmitido por apiClient.
+ * Maneja errores de registro de forma controlada sin exponer tokens en logs ni bloquear la app.
  */
 export async function registerDeviceOnBackend(
   platform: string,
   expoToken: string,
   deviceId?: string
 ): Promise<void> {
-  await apiClient.post('/api/notifications/device-token', {
-    platform,
-    expoPushToken: expoToken,
-    deviceId,
-  });
+  if (!expoToken) return;
+  try {
+    await apiClient.post('/api/notifications/device-token', {
+      platform,
+      expoPushToken: expoToken,
+      deviceId,
+    });
+  } catch (error: any) {
+    // Fallo controlado de registro para no interrumpir el uso normal de la app
+    const status = error?.response?.status;
+    if (__DEV__) {
+      console.warn(`[PushNotification] Registro de dispositivo no completado (HTTP ${status || 'red'}).`);
+    }
+  }
 }
 
 export async function setupPushNotifications(

@@ -5,8 +5,8 @@ expo-env.d.ts
 .env.local
 cloudflared
 
-# Keystores y credenciales de firma de producción
-*.jks
+# Android release signing keys (H-20)
 *.keystore
+*.jks
 !android/app/debug.keystore
 release-signing.properties
