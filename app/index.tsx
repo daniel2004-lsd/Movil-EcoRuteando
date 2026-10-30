@@ -178,12 +178,22 @@
 
               <View style={s.heroButtons}>
                 <TouchableOpacity
+                  style={s.heroBtnPrimary}
+                  activeOpacity={0.9}
+                  onPress={() => router.push('/(auth)/login')}
+                >
+                  <Text style={s.heroBtnPrimaryText}>
+                    {t('auth.loginButton') ?? 'Iniciar sesión'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
                   style={s.heroBtnSecondary}
                   activeOpacity={0.9}
-                  onPress={() => router.push('/(auth)/guest')}
+                  onPress={() => router.push('/(auth)/register')}
                 >
                   <Text style={s.heroBtnSecondaryText}>
-                    {t('landing.guestButton')}
+                    {t('auth.registerButton') ?? 'Registrarse'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -295,7 +305,7 @@
               onPress={() => router.push('/(auth)/register')}
             >
               <Text style={s.footerBtnText}>
-                {t('landing.guestButton')}
+                {t('auth.registerButton') ?? 'Registrarse'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -452,17 +462,17 @@
                     style={s.drawerGhost}
                     onPress={() => {
                       setMenuOpen(false);
-                      router.push('/(auth)/guest');
+                      router.push('/(auth)/register');
                     }}
                   >
                     <Ionicons
-                      name="walk-outline"
+                      name="person-add-outline"
                       size={18}
                       color="#15803d"
                       style={{ marginRight: 6 }}
                     />
                     <Text style={s.drawerGhostText}>
-                      {t('landing.guestButton') ?? 'Modo invitado'}
+                      {t('auth.registerButton') ?? 'Crear cuenta'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -636,11 +646,25 @@
     },
     heroButtons: {
       marginTop: spacing.md,
-      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 12,
+    },
+    heroBtnPrimary: {
+      paddingVertical: 11,
+      paddingHorizontal: 24,
+      borderRadius: 18,
+      backgroundColor: '#ffffff',
+    },
+    heroBtnPrimaryText: {
+      fontFamily: 'Times New Roman',
+      fontSize: 14,
+      fontWeight: '700',
+      color: '#059669',
     },
     heroBtnSecondary: {
       paddingVertical: 11,
-      paddingHorizontal: 32,
+      paddingHorizontal: 24,
       borderRadius: 18,
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.4)',

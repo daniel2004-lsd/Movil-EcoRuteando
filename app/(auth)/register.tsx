@@ -5,22 +5,15 @@ import React, { useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { SocialBtn } from '../../src/shared/components/auth/SocialBtn';
 import { TermsModal } from '../../src/shared/components/auth/TermsModal';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import apiClient from '../../src/shared/services/apiClient';
-import { useAuth } from "../../src/shared/store/AuthContext";
-import * as WebBrowser from 'expo-web-browser';
-import { decodeJwtPayload } from '../../src/shared/utils/jwt';
-import * as Crypto from 'expo-crypto';
-WebBrowser.maybeCompleteAuthSession();
 
 export default function RegisterScreen() {
   const router = useRouter();
   const { t } = useLanguage();
   const { theme, toggleTheme } = useThemeMode();
-    const { signIn } = useAuth();
   const isDark = theme === 'dark';
   const [form, setForm] = useState({ firstName:'', lastName:'', email:'', pw:'', confirmPw:'' });
   const [showPw, setShowPw] = useState(false);
@@ -60,48 +53,6 @@ export default function RegisterScreen() {
     } finally { setLoading(false); }
   };
 
-  const handleGoogleLogin = async () => {
-    const redirectUri = 'com.ecoruteando.mobile:/auth/callback';
-    try {
-      const clientId = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '';
-      const bytes = await Crypto.getRandomBytesAsync(64);
-      const verifier = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-      const b64 = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, verifier, { encoding: Crypto.CryptoEncoding.BASE64 });
-      const challenge = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('openid email profile')}&response_type=code&code_challenge=${challenge}&code_challenge_method=S256&state=google`;
-      const result:any = await WebBrowser.openAuthSessionAsync(url, redirectUri);
-      if (result?.type !== 'success') { console.warn('[OAuth-Google] cancelado, type=', result?.type);
-      Dialog.alert(t('auth.oauthCancelledTitle'), t('auth.oauthCancelledMsg'), {
-        tone: 'info',
-        icon: 'hand-left',
-      }); return; }
-      const mc = String(result.url || '').match(/[?&]code=([^&]+)/);
-      if (!mc) { console.warn('[OAuth-Google] sin code_verifier/authorization code');
-      Dialog.alert(t('auth.oauthErrorTitle'), t('auth.oauthNoCode'), {
-        tone: 'error',
-      }); return; }
-      const body = 'client_id='+encodeURIComponent(clientId)+'&code='+encodeURIComponent(decodeURIComponent(mc[1]))+'&redirect_uri='+encodeURIComponent(redirectUri)+'&grant_type=authorization_code&code_verifier='+encodeURIComponent(verifier);
-      const tr = await fetch('https://oauth2.googleapis.com/token', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
-      const tj:any = await tr.json().catch(() => ({}));
-      const tok = tj.access_token;
-      if (!tok) { console.warn('[OAuth-Google] sin access_token:', tj.error_description || tj.error || tr.status);
-      Dialog.alert(t('auth.oauthErrorTitle'), t('auth.oauthNoToken'), {
-        tone: 'error',
-      }); return; }
-      const idp = (tj.id_token ? decodeJwtPayload(tj.id_token) : null) || {};
-      const { data } = await apiClient.post('/api/auth/oauth/login', { provider: 'google', accessToken: tok });
-      const emailForSign = (typeof idp.email === 'string' ? idp.email.trim() : '') || 'oauth@google.com';
-      const firstNameForSign = (typeof idp.given_name === 'string' ? idp.given_name.trim() : '');
-      await signIn({ accessToken: data.accessToken, refreshToken: data.refreshToken, email: emailForSign, firstName: firstNameForSign });
-      router.replace('/(tabs)');
-    } catch(e:any) {
-      console.warn('[OAuth-Google] excepción:', e?.message || e);
-      const errMsg = e?.response?.data?.detail || e?.response?.data?.message || e?.message || t('auth.oauthNoToken');
-      Dialog.alert(t('auth.oauthErrorTitle'), errMsg, {
-        tone: 'error',
-      });
-    }
-  };
 
   return (
     <LinearGradient colors={isDark ? ['#0B1215','#111C20'] : ['#ecfdf5','#f0fdf4','#ccfbf1']} style={s.bg}>
@@ -171,10 +122,6 @@ export default function RegisterScreen() {
 
             <TouchableOpacity onPress={handleRegister} disabled={!isFormValid() || loading} style={[s.primaryBtn, (!isFormValid()||loading)&&{opacity:0.5}]}><Text style={s.primaryText}>{loading?t('auth.registering'):t('auth.registerButton')}</Text></TouchableOpacity>
 
-            <View style={s.divider}><View style={[s.divLine, isDark&&{backgroundColor:'rgba(52,211,153,0.2)'}]} /><Text style={[s.divText, isDark&&{color:'#94a3b8'}]}>{t('auth.orRegisterWith')}</Text><View style={[s.divLine, isDark&&{backgroundColor:'rgba(52,211,153,0.2)'}]} /></View>
-            <View style={s.socialRow}>
-              <SocialBtn icon="logo-google" color="#EA4335" label="Google" onPress={handleGoogleLogin} />
-            </View>
 
             <View style={s.registerRow}><Text style={[s.registerText, isDark&&{color:'#94a3b8'}]}>{t('auth.alreadyAccount')}</Text><TouchableOpacity onPress={()=>router.replace('/(auth)/login')}><Text style={[s.registerLink, isDark&&{color:'#34D399'}]}>{' '}{t('auth.loginHere')}</Text></TouchableOpacity></View>
           </View>
@@ -227,12 +174,6 @@ const s = StyleSheet.create({
   errorLink:{fontSize:12,color:'#059669',fontWeight:'600',marginTop:4},
   primaryBtn:{width:'100%',backgroundColor:'#059669',borderRadius:8,paddingVertical:10,alignItems:'center',marginTop:14},
   primaryText:{color:'#fff',fontWeight:'600',fontSize:14},
-  divider:{flexDirection:'row',alignItems:'center',gap:8,marginVertical:16},
-  divLine:{flex:1,height:1,backgroundColor:'#e5e7eb'},
-  divText:{fontSize:10,color:'#9ca3af',textTransform:'uppercase',letterSpacing:0.5},
-  socialRow:{flexDirection:'row',gap:8},
-  socialBtn:{flex:1,flexDirection:'row',gap:6,paddingVertical:10,borderRadius:8,borderWidth:1,borderColor:'#e5e7eb',alignItems:'center',justifyContent:'center',backgroundColor:'#fff'},
-  socialLabel:{fontSize:10,color:'#6b7280',fontWeight:'500'},
   registerRow:{flexDirection:'row',justifyContent:'center',marginTop:16,borderTopWidth:1,borderTopColor:'#f3f4f6',paddingTop:12},
   registerText:{fontSize:12,color:'#9ca3af'},
   registerLink:{fontSize:12,color:'#059669',fontWeight:'500'},

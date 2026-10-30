@@ -10,7 +10,7 @@ import {
 
 export function ClimateWatcher() {
   const { auth } = useAuth();
-  const active = !!auth.userId && !auth.guest;
+  const active = !!auth.userId && auth.isAuthenticated;
 
   useEffect(() => {
     if (!active) {
