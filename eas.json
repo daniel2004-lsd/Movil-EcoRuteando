@@ -13,7 +13,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://ecoruteandobackend.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://ecoruteandobackend.onrender.com",
+        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyBwRP1anBo41YnMQDlx9EeOfKBpfLK7R4o"
       }
     },
     "production": {

@@ -1,13 +1,28 @@
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
+import { View, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, TAB_BAR_HEIGHT } from '../../src/shared/theme';
 import { useAuth } from '../../src/shared/store/AuthContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 
 export default function TabsLayout() {
-  const { auth } = useAuth();
-  const isGuest = !!auth.guest;
+  const { isAuthenticated, isLoading } = useAuth();
   const { t } = useLanguage();
+
+  // Esperar a que la restauración del token termine antes de cualquier redirección
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#f0fdf4', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#10b981" />
+      </View>
+    );
+  }
+
+  // Si no está autenticado, redirigir inmediatamente al login (bloquea deep linking a rutas privadas)
+  if (!isAuthenticated) {
+    return <Redirect href="/(auth)/login" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -30,7 +45,6 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: t('tabs.home'),
-          href: isGuest ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
           ),
@@ -49,7 +63,6 @@ export default function TabsLayout() {
         name="history"
         options={{
           title: t('tabs.history'),
-          href: isGuest ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="time" size={size} color={color} />
           ),
@@ -69,7 +82,6 @@ export default function TabsLayout() {
         name="saved-routes"
         options={{
           title: t('savedRoutes.title'),
-          href: isGuest ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="navigate" size={size} color={color} />
           ),
@@ -111,7 +123,6 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: t('tabs.profile'),
-          href: isGuest ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person" size={size} color={color} />
           ),

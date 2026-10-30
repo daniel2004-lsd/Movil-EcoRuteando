@@ -2,10 +2,10 @@
 import { Dialog } from '../../src/shared/components/ui/AppDialog';
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image,  } from 'react-native';
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image, Modal, ActivityIndicator,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
@@ -44,7 +44,7 @@ const LANG_OPTIONS = [
 ];
 function CardHeader({
   icon, color, title, subtitle, isDark,
-}: { icon: any; color: string; title: string; subtitle: string; isDark: boolean }) {
+}: { icon: any; color: string; title: string; subtitle?: string; isDark: boolean }) {
   return (
     <View style={s.cardHead}>
       <View style={[s.cardIcon, { backgroundColor: color }, isDark && { backgroundColor: `${color}33` }]}>
@@ -52,7 +52,9 @@ function CardHeader({
       </View>
       <View style={s.cardHeadText}>
         <Text style={[s.cardTitle, isDark && { color: '#e2e8f0' }]}>{title}</Text>
-        <Text style={[s.cardSubtitle, isDark && { color: '#94a3b8' }]}>{subtitle}</Text>
+        {Boolean(subtitle) && (
+          <Text style={[s.cardSubtitle, isDark && { color: '#94a3b8' }]}>{subtitle}</Text>
+        )}
       </View>
     </View>
   );
@@ -79,6 +81,7 @@ export default function ProfileScreen() {
 
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [avatarBroken, setAvatarBroken] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
 
   const [profileEmail, setProfileEmail] = useState('');
   const [hasPassword, setHasPassword] = useState(true);
@@ -324,7 +327,7 @@ export default function ProfileScreen() {
     try {
       let tripsList: any[] = [];
       try {
-        const { data } = await apiClient.get('/api/mobility/trips/history');
+        const { data } = await apiClient.get('/api/trips');
         const raw = Array.isArray(data) ? data : (data?.trips ?? data?.items ?? []);
         tripsList = Array.isArray(raw) ? raw : [];
       } catch (err) {
@@ -346,7 +349,7 @@ export default function ProfileScreen() {
             <td>${t.startName || t.originAddress || 'Origen'}</td>
             <td>${t.destinationName || t.destinationAddress || 'Destino'}</td>
             <td>${t.transportMode || 'A pie'}</td>
-            <td>${Number(t.distanceKm ?? 0).toFixed(2)} km</td>
+            <td>${Number(t.actualDistanceKm ?? t.distanceKm ?? 0).toFixed(2)} km</td>
             <td>${Number(t.actualCo2Kg ?? t.estimatedCo2Kg ?? t.co2SavedKg ?? 0).toFixed(3)} kg</td>
             <td>${t.startedAt ? new Date(t.startedAt).toLocaleDateString('es-CO') : '—'}</td>
           </tr>
@@ -415,7 +418,7 @@ export default function ProfileScreen() {
           escapeCsv(t.startName || t.originAddress || 'Origen'),
           escapeCsv(t.destinationName || t.destinationAddress || 'Destino'),
           escapeCsv(t.transportMode || 'walking'),
-          Number(t.distanceKm ?? 0).toFixed(2),
+          Number(t.actualDistanceKm ?? t.distanceKm ?? 0).toFixed(2),
           Number(t.actualCo2Kg ?? t.estimatedCo2Kg ?? t.co2SavedKg ?? 0).toFixed(3),
           escapeCsv(t.startedAt ? new Date(t.startedAt).toLocaleDateString('es-CO') : '')
         ].join(','));
@@ -512,7 +515,7 @@ export default function ProfileScreen() {
             style={[s.heroCard, isDark && s.heroCardDark]}
           >
             <View style={s.heroRow}>
-              <TouchableOpacity style={s.avatarWrap} onPress={handlePickAvatar} activeOpacity={0.85}>
+              <TouchableOpacity style={s.avatarWrap} onPress={() => setShowPhotoModal(true)} activeOpacity={0.85}>
                 {avatarUri && !avatarBroken ? (
                   <Image
                     source={{ uri: avatarUri }}
@@ -525,7 +528,7 @@ export default function ProfileScreen() {
                   </View>
                 )}
                 <View style={s.avatarBadge}>
-                  <Ionicons name="camera-outline" size={13} color="#047857" />
+                  <Ionicons name="eye-outline" size={13} color="#047857" />
                 </View>
               </TouchableOpacity>
 
@@ -735,7 +738,6 @@ export default function ProfileScreen() {
                   icon="options-outline"
                   color="#10b981"
                   title={t('profile.account.title')}
-                  subtitle={t('profile.account.subtitle')}
                   isDark={isDark}
                 />
 
@@ -1183,6 +1185,79 @@ export default function ProfileScreen() {
             <Text style={[s.footerText, isDark && { color: '#94a3b8' }]}>{t('home.footerNote')}</Text>
           </View>
         </ScrollView>
+      {/* Modal de Vista Previa de Foto de Perfil */}
+      <Modal
+        visible={showPhotoModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPhotoModal(false)}
+      >
+        <View style={s.photoModalBackdrop}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowPhotoModal(false)}
+          />
+
+          <View style={[s.photoModalContent, isDark && s.photoModalContentDark]}>
+            <View style={s.photoModalHeader}>
+              <Text style={[s.photoModalTitle, isDark && { color: '#e2e8f0' }]}>
+                Foto de perfil
+              </Text>
+              <TouchableOpacity
+                style={[s.photoModalCloseBtn, isDark && s.photoModalCloseBtnDark]}
+                onPress={() => setShowPhotoModal(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close" size={20} color={isDark ? '#e2e8f0' : '#4b5563'} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={s.photoModalImageContainer}>
+              {avatarUri && !avatarBroken ? (
+                <Image
+                  source={{ uri: avatarUri }}
+                  style={s.photoModalImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[s.photoModalPlaceholder, isDark && { backgroundColor: '#162329' }]}>
+                  <Ionicons name="person" size={100} color={isDark ? '#334155' : '#cbd5e1'} />
+                  <Text style={[s.photoModalPlaceholderText, isDark && { color: '#94a3b8' }]}>
+                    No has seleccionado una foto de perfil
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <Text style={[s.photoModalName, isDark && { color: '#e2e8f0' }]} numberOfLines={1}>
+              {fullName || t('profile.defaultName')}
+            </Text>
+
+            <View style={s.photoModalActions}>
+              <TouchableOpacity
+                style={s.photoModalChangeBtn}
+                onPress={() => {
+                  setShowPhotoModal(false);
+                  handlePickAvatar();
+                }}
+              >
+                <Ionicons name="camera-outline" size={18} color="#fff" />
+                <Text style={s.photoModalChangeBtnText}>{t('profile.changePhoto')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[s.photoModalCloseActionBtn, isDark && s.photoModalCloseActionBtnDark]}
+                onPress={() => setShowPhotoModal(false)}
+              >
+                <Text style={[s.photoModalCloseActionText, isDark && { color: '#94a3b8' }]}>
+                  Cerrar
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       </SafeAreaView>
     </View>
   );
@@ -1413,7 +1488,131 @@ const s = StyleSheet.create({
   },
   dangerBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
 
-  // ---------- footer ----------
-  footer: { flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', marginTop: 24 },
-  footerText: { fontSize: 12, color: '#6b7280' },
+  // Modal de Foto de Perfil
+  photoModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  photoModalContent: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  photoModalContentDark: {
+    backgroundColor: '#162329',
+    borderColor: '#26383D',
+    borderWidth: 1,
+  },
+  photoModalHeader: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  photoModalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1f2937',
+  },
+  photoModalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoModalCloseBtnDark: {
+    backgroundColor: '#26383D',
+  },
+  photoModalImageContainer: {
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    overflow: 'hidden',
+    borderWidth: 4,
+    borderColor: '#10b981',
+    marginBottom: 14,
+    backgroundColor: '#f8fafc',
+  },
+  photoModalImage: {
+    width: '100%',
+    height: '100%',
+  },
+  photoModalPlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    backgroundColor: '#f1f5f9',
+  },
+  photoModalPlaceholderText: {
+    fontSize: 11,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  photoModalName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: 16,
+  },
+  photoModalActions: {
+    width: '100%',
+    gap: 10,
+  },
+  photoModalChangeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#10b981',
+    borderRadius: 14,
+    paddingVertical: 12,
+  },
+  photoModalChangeBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  photoModalCloseActionBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#f1f5f9',
+  },
+  photoModalCloseActionBtnDark: {
+    backgroundColor: '#26383D',
+  },
+  photoModalCloseActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  footer: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
+    marginBottom: 20,
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
 });

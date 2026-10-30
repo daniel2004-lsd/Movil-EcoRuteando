@@ -9,3 +9,4 @@ cloudflared
 *.keystore
 *.jks
 !android/app/debug.keystore
+release-signing.properties

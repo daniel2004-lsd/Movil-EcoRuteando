@@ -15,7 +15,6 @@ import { useAuth } from '../../src/shared/store/AuthContext';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 import apiClient from '../../src/shared/services/apiClient';
-import { AccountRequired } from '../../src/shared/components/ui/AccountRequired';
 import { Dialog } from '../../src/shared/components/ui/AppDialog';
 
 type Favorite = {
@@ -42,8 +41,6 @@ export default function FavoritesScreen() {
   const { theme } = useThemeMode();
   const { t, lang } = useLanguage();
   const isDark = theme === 'dark';
-
-  const isGuest = !!auth.guest;
 
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,16 +82,10 @@ export default function FavoritesScreen() {
     }
   }, []);
 
-  // Recarga cada vez que entras a la pantalla: así siempre ves los favoritos nuevos.
   useFocusEffect(
     useCallback(() => {
-      // Invitado: nunca llamamos a la API (no hay sesión propia que mostrar).
-      if (isGuest) {
-        setLoading(false);
-        return;
-      }
       fetchFavorites();
-    }, [fetchFavorites, isGuest])
+    }, [fetchFavorites])
   );
 
   const removeFavorite = (route: Favorite) => {
@@ -264,11 +255,7 @@ export default function FavoritesScreen() {
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        {isGuest ? (
-          <AccountRequired action={t('favorites.title')} />
-        ) : (
-          <>
-            {/* Resumen — misma tarjeta que el saludo del dashboard */}
+        {/* Resumen — misma tarjeta que el saludo del dashboard */}
             <View style={[s.card, isDark && s.cardDark]}>
               <Text style={[s.cardTitle, isDark && { color: '#e2e8f0' }]}>
                 {t('favorites.savedRoutes')}
@@ -392,8 +379,6 @@ export default function FavoritesScreen() {
                 ))
               )}
             </View>
-          </>
-        )}
       </ScrollView>
     </View>
   );
