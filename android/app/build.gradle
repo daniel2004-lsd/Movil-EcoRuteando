@@ -81,57 +81,57 @@ def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBu
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// Inyección dinámica y segura de la clave de Google Maps Platform (sin almacenar secretos en Git)
 def getGoogleMapsApiKey() {
-    def envKey = System.getenv("EXPO_PUBLIC_GOOGLE_MAPS_KEY")
-    if (envKey && !envKey.trim().isEmpty()) {
-        return envKey.trim()
-    }
-    def propKey = project.findProperty("EXPO_PUBLIC_GOOGLE_MAPS_KEY")
-    if (propKey && !propKey.toString().trim().isEmpty()) {
-        return propKey.toString().trim()
-    }
-    def signingPropertiesFile = rootProject.file("release-signing.properties")
-    if (signingPropertiesFile.exists()) {
-        Properties signingProps = new Properties()
-        signingProps.load(new FileInputStream(signingPropertiesFile))
-        def signingKey = signingProps.getProperty("EXPO_PUBLIC_GOOGLE_MAPS_KEY")
-        if (signingKey && !signingKey.trim().isEmpty()) {
-            return signingKey.trim()
+    def key = System.getenv("EXPO_PUBLIC_GOOGLE_MAPS_KEY") ?:
+              System.getenv("MAPS_API_KEY") ?:
+              (project.findProperty("EXPO_PUBLIC_GOOGLE_MAPS_KEY") ?:
+              (project.findProperty("MAPS_API_KEY") ?: ""))
+
+    if (!key || key.toString().trim().isEmpty()) {
+        def signingPropertiesFile = rootProject.file("release-signing.properties")
+        if (signingPropertiesFile.exists()) {
+            Properties signingProps = new Properties()
+            signingProps.load(new FileInputStream(signingPropertiesFile))
+            def signingKey = signingProps.getProperty("EXPO_PUBLIC_GOOGLE_MAPS_KEY")
+            if (signingKey && !signingKey.trim().isEmpty()) {
+                key = signingKey.trim()
+            }
         }
     }
-    def envLocalFile = rootProject.file("../.env.local")
-    if (envLocalFile.exists()) {
-        def envLines = envLocalFile.readLines()
-        for (line in envLines) {
-            def trimmed = line.trim()
-            if (trimmed.startsWith("EXPO_PUBLIC_GOOGLE_MAPS_KEY=")) {
-                def val = trimmed.substring("EXPO_PUBLIC_GOOGLE_MAPS_KEY=".length()).trim()
-                if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-                    val = val.substring(1, val.length() - 1)
-                }
-                if (!val.isEmpty()) {
-                    return val
+
+    if (!key || key.toString().trim().isEmpty()) {
+        def envLocalFile = rootProject.file("../.env.local")
+        if (envLocalFile.exists()) {
+            envLocalFile.eachLine { line ->
+                def matcher = (line =~ /^\s*EXPO_PUBLIC_GOOGLE_MAPS_KEY\s*=\s*(.*)\s*$/)
+                if (matcher.matches()) {
+                    key = matcher[0][1].trim().replaceAll(/^["']|["']$/, '')
                 }
             }
         }
     }
-    def envFile = rootProject.file("../.env")
-    if (envFile.exists()) {
-        def envLines = envFile.readLines()
-        for (line in envLines) {
-            def trimmed = line.trim()
-            if (trimmed.startsWith("EXPO_PUBLIC_GOOGLE_MAPS_KEY=")) {
-                def val = trimmed.substring("EXPO_PUBLIC_GOOGLE_MAPS_KEY=".length()).trim()
-                if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-                    val = val.substring(1, val.length() - 1)
-                }
-                if (!val.isEmpty()) {
-                    return val
+
+    if (!key || key.toString().trim().isEmpty()) {
+        def envFile = rootProject.file("../.env")
+        if (envFile.exists()) {
+            envFile.eachLine { line ->
+                def matcher = (line =~ /^\s*EXPO_PUBLIC_GOOGLE_MAPS_KEY\s*=\s*(.*)\s*$/)
+                if (matcher.matches()) {
+                    key = matcher[0][1].trim().replaceAll(/^["']|["']$/, '')
                 }
             }
         }
     }
-    return ""
+
+    if (!key || key.toString().trim().isEmpty()) {
+        logger.warn("[GoogleMaps] ADVERTENCIA: No se detectó clave de Google Maps (EXPO_PUBLIC_GOOGLE_MAPS_KEY / MAPS_API_KEY). El mapa nativo no cargará teselas.")
+    }
+    return key ?: ""
+}
+
+def resolveGoogleMapsApiKey() {
+    return getGoogleMapsApiKey()
 }
 
 android {
@@ -173,36 +173,31 @@ android {
             def storeFilePath = signingProps.getProperty('ECORUTEANDO_RELEASE_STORE_FILE')
                 ?: project.findProperty('ECORUTEANDO_RELEASE_STORE_FILE')
                 ?: System.getenv('ECORUTEANDO_RELEASE_STORE_FILE')
+                ?: project.findProperty('RELEASE_STORE_FILE')
+                ?: System.getenv('RELEASE_STORE_FILE')
             def storePasswordVal = signingProps.getProperty('ECORUTEANDO_RELEASE_STORE_PASSWORD')
                 ?: project.findProperty('ECORUTEANDO_RELEASE_STORE_PASSWORD')
                 ?: System.getenv('ECORUTEANDO_RELEASE_STORE_PASSWORD')
+                ?: project.findProperty('RELEASE_STORE_PASSWORD')
+                ?: System.getenv('RELEASE_STORE_PASSWORD')
             def keyAliasVal = signingProps.getProperty('ECORUTEANDO_RELEASE_KEY_ALIAS')
                 ?: project.findProperty('ECORUTEANDO_RELEASE_KEY_ALIAS')
                 ?: System.getenv('ECORUTEANDO_RELEASE_KEY_ALIAS')
+                ?: project.findProperty('RELEASE_KEY_ALIAS')
+                ?: System.getenv('RELEASE_KEY_ALIAS')
             def keyPasswordVal = signingProps.getProperty('ECORUTEANDO_RELEASE_KEY_PASSWORD')
                 ?: project.findProperty('ECORUTEANDO_RELEASE_KEY_PASSWORD')
                 ?: System.getenv('ECORUTEANDO_RELEASE_KEY_PASSWORD')
+                ?: project.findProperty('RELEASE_KEY_PASSWORD')
+                ?: System.getenv('RELEASE_KEY_PASSWORD')
 
-            if (storeFilePath) {
-                def resolvedStoreFile = file(storeFilePath)
-                if (resolvedStoreFile.exists()) {
-                    storeFile resolvedStoreFile
-                    storePassword storePasswordVal
-                    keyAlias keyAliasVal
-                    keyPassword keyPasswordVal
-                    v1SigningEnabled true
-                    v2SigningEnabled true
-                }
-            } else {
-                def debugStore = file('debug.keystore')
-                if (debugStore.exists()) {
-                    storeFile debugStore
-                    storePassword 'android'
-                    keyAlias 'androiddebugkey'
-                    keyPassword 'android'
-                    v1SigningEnabled true
-                    v2SigningEnabled true
-                }
+            if (storeFilePath && file(storeFilePath).exists()) {
+                storeFile file(storeFilePath)
+                storePassword storePasswordVal
+                keyAlias keyAliasVal
+                keyPassword keyPasswordVal
+                v1SigningEnabled true
+                v2SigningEnabled true
             }
         }
     }
@@ -211,8 +206,14 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // Release utiliza exclusivamente la configuración de firma de producción
-            signingConfig signingConfigs.release
+            // SEGURIDAD (H-20): NUNCA utilizar signingConfigs.debug en compilaciones release.
+            // Si existen credenciales de release válidas en el entorno, se firma con release.
+            // Si no existen credenciales de release, signingConfig queda en null (no se firma con debug.keystore).
+            if (signingConfigs.release.storeFile != null) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig null
+            }
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
@@ -280,20 +281,35 @@ dependencies {
     }
 }
 
+// SEGURIDAD (H-20): Validación de firma de producción en el grafo de tareas de Gradle
 gradle.taskGraph.whenReady { taskGraph ->
-    if (taskGraph.hasTask(":app:assembleRelease") || taskGraph.hasTask(":app:bundleRelease")) {
-        def releaseConfig = android.signingConfigs.findByName("release")
-        if (!releaseConfig || !releaseConfig.storeFile || !releaseConfig.storeFile.exists()) {
+    def isReleaseBuild = taskGraph.allTasks.any { task ->
+        task.name.equalsIgnoreCase("assembleRelease") || task.name.equalsIgnoreCase("bundleRelease")
+    }
+    def releaseConfig = android.signingConfigs.findByName("release")
+    def hasReleaseKey = releaseConfig && releaseConfig.storeFile && releaseConfig.storeFile.exists()
+
+    if (isReleaseBuild && !hasReleaseKey) {
+        def requireSigning = (System.getenv("REQUIRE_RELEASE_SIGNING")?.toBoolean() ?: false) ||
+                             (project.findProperty("REQUIRE_RELEASE_SIGNING")?.toString()?.toBoolean() ?: false)
+        if (requireSigning) {
             throw new GradleException(
-                "\n❌ ERROR DE FIRMA DE PRODUCCIÓN:\n" +
-                "La variante release no puede compilarse porque no se han configurado credenciales de firma de producción válidas.\n" +
+                "\n❌ [H-20] ERROR CRÍTICO: La compilación de release exige firma de producción (REQUIRE_RELEASE_SIGNING=true), " +
+                "pero faltan las credenciales válidas.\n" +
                 "Para compilar release, cree el archivo android/release-signing.properties (o defina las variables de entorno):\n" +
-                "  ECORUTEANDO_RELEASE_STORE_FILE=/ruta/hacia/release.keystore\n" +
-                "  ECORUTEANDO_RELEASE_STORE_PASSWORD=***\n" +
-                "  ECORUTEANDO_RELEASE_KEY_ALIAS=***\n" +
-                "  ECORUTEANDO_RELEASE_KEY_PASSWORD=***\n" +
+                "  ECORUTEANDO_RELEASE_STORE_FILE (o RELEASE_STORE_FILE)\n" +
+                "  ECORUTEANDO_RELEASE_STORE_PASSWORD (o RELEASE_STORE_PASSWORD)\n" +
+                "  ECORUTEANDO_RELEASE_KEY_ALIAS (o RELEASE_KEY_ALIAS)\n" +
+                "  ECORUTEANDO_RELEASE_KEY_PASSWORD (o RELEASE_KEY_PASSWORD)\n" +
                 "Consulte la plantilla en android/release-signing.properties.example.\n"
             )
+        } else {
+            logger.warn("==========================================================================")
+            logger.warn("[H-20] ADVERTENCIA DE SEGURIDAD: Credenciales de produccion no configuradas.")
+            logger.warn("El artefacto release generado estara NO FIRMADO (unsigned) y no es apto para distribucion.")
+            logger.warn("Para firmar configure: android/release-signing.properties o RELEASE_STORE_FILE / ECORUTEANDO_RELEASE_STORE_FILE.")
+            logger.warn("Se ha impedido el uso inseguro de la debug.keystore en compilaciones release.")
+            logger.warn("==========================================================================")
         }
     }
 }

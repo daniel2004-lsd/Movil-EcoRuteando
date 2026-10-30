@@ -1,11 +1,15 @@
-// app/(auth)/recover-new-password.tsx — estilo web NewPassword.jsx
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, TextInput, Animated, Image } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 import apiClient from '../../src/shared/services/apiClient';
+import {
+  validateNewPassword,
+  buildResetPasswordPayload,
+  mapRecoveryApiError,
+} from '../../src/shared/utils/passwordRecoveryValidation';
 
 export default function RecoverNewPasswordScreen() {
   const router = useRouter();
@@ -40,7 +44,7 @@ export default function RecoverNewPasswordScreen() {
   const handleSubmit = async () => {
     setError(null);
     const resolvedToken = (token || (globalThis as any).__recoveryToken || '').trim();
-    const resolvedEmail = (email || (globalThis as any).__recoveryEmail || '').trim();
+    const resolvedEmail = (email || (globalThis as any).__recoveryEmail || '').trim().toLowerCase();
 
     if (!resolvedToken) {
       setError('No se encontró el código de verificación. Vuelve a solicitarlo.');
@@ -50,29 +54,22 @@ export default function RecoverNewPasswordScreen() {
       setError('No se identificó el correo electrónico asociado. Vuelve a iniciar el proceso.');
       return;
     }
-    if (pass.length < 8) {
-      setError(t('auth.passwordMin8Error') ?? 'La contraseña debe contener al menos 8 caracteres.');
+
+    const passwordValidation = validateNewPassword(pass, pass2);
+    if (!passwordValidation.isValid) {
+      setError(passwordValidation.error);
       return;
     }
-    if (pass !== pass2) {
-      setError(t('auth.passwordMismatch') ?? 'Las contraseñas no coinciden.');
-      return;
-    }
-    if (!/[A-Z]/.test(pass) || !/[0-9]/.test(pass)) {
-      setError('La contraseña debe contener al menos una mayúscula y un número.');
-      return;
-    }
+
     setLoading(true);
     try {
-      await apiClient.post('/api/auth/reset-password', {
-        token: resolvedToken,
-        newPassword: pass,
-        email: resolvedEmail
-      });
+      const payload = buildResetPasswordPayload(resolvedToken, pass, resolvedEmail);
+      await apiClient.post('/api/auth/reset-password', payload);
+      delete (globalThis as any).__recoveryToken;
+      delete (globalThis as any).__recoveryEmail;
       setSuccess(true);
     } catch (err: any) {
-      const serverMsg = err?.response?.data?.message || err?.response?.data?.detail;
-      setError(serverMsg || t('auth.resetPassError') || 'Error al restablecer la contraseña.');
+      setError(mapRecoveryApiError(err, t('auth.resetPassError') || 'Error al restablecer la contraseña.'));
     } finally {
       setLoading(false);
     }
