@@ -1,13 +1,16 @@
 import axios from 'axios';
 import * as SecureStore from './keyStorage';
+import { emitSessionExpired } from './authEvents';
 import { tGlobal } from '../../i18n/translations';
 
-const DEFAULT_URL = 'https://ecoruteandobackend.onrender.com';
-export const API_BASE = process.env.EXPO_PUBLIC_API_URL || DEFAULT_URL;
+export const PRODUCTION_API_URL = 'https://ecoruteandobackend.onrender.com';
+export const API_BASE = !__DEV__
+  ? PRODUCTION_API_URL
+  : (process.env.EXPO_PUBLIC_API_URL || PRODUCTION_API_URL);
 
 const apiClient = axios.create({
   baseURL: API_BASE,
-  timeout: 15000,
+  timeout: 45000,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -25,10 +28,17 @@ const processQueue = (error: unknown, token: string | null) => {
 };
 
 apiClient.interceptors.request.use(async config => {
-  const customUrl = await SecureStore.getItemAsync('customApiUrl');
-  if (customUrl && customUrl.trim()) {
-    config.baseURL = customUrl.trim().replace(/\/+$/, '');
+  // Purgar cualquier customApiUrl residual persistida en el dispositivo para evitar errores de red
+  try {
+    const customUrl = await SecureStore.getItemAsync('customApiUrl');
+    if (customUrl) {
+      await SecureStore.deleteItemAsync('customApiUrl');
+    }
+  } catch {
+    // Silencioso
   }
+  config.baseURL = API_BASE;
+
   const token = await SecureStore.getItemAsync('accessToken');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -67,9 +77,7 @@ apiClient.interceptors.response.use(
         const refreshToken = await SecureStore.getItemAsync('refreshToken');
         if (!refreshToken) throw new Error('No has iniciado sesión o tu sesión ha expirado.');
 
-        const customUrl = await SecureStore.getItemAsync('customApiUrl');
-        const activeBase = (customUrl && customUrl.trim()) ? customUrl.trim().replace(/\/+$/, '') : API_BASE;
-        const { data } = await axios.post(`${activeBase}/api/auth/refresh`, {
+        const { data } = await axios.post(`${API_BASE}/api/auth/refresh`, {
           refreshToken,
         });
 
@@ -79,11 +87,21 @@ apiClient.interceptors.response.use(
         processQueue(null, data.accessToken);
         originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
         return apiClient(originalRequest);
-      } catch (refreshError) {
+      } catch (refreshError: any) {
         processQueue(refreshError, null);
-        await SecureStore.deleteItemAsync('accessToken');
-        await SecureStore.deleteItemAsync('refreshToken');
-        await SecureStore.deleteItemAsync('profileAvatarUri');
+
+        // No cerrar sesión por errores temporales de red o indisponibilidad momentánea de servidor
+        const isTemporaryNetworkOrServerError =
+          !refreshError.response ||
+          refreshError.code === 'ECONNABORTED' ||
+          (refreshError.response.status >= 500 && refreshError.response.status <= 599);
+
+        if (!isTemporaryNetworkOrServerError) {
+          await SecureStore.deleteItemAsync('accessToken');
+          await SecureStore.deleteItemAsync('refreshToken');
+          await SecureStore.deleteItemAsync('profileAvatarUri');
+          emitSessionExpired();
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

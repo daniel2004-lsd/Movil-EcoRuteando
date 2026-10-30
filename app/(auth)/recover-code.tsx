@@ -62,12 +62,22 @@ export default function RecoverCodeScreen() {
 
   const handleVerify = () => {
     const joined = code.join('');
-    if (joined.length < 6) return;
+    if (joined.length < 6) {
+      setError('Por favor introduce los 6 dígitos del código.');
+      return;
+    }
+    const targetEmail = (email || (globalThis as any).__recoveryEmail || '').trim();
+    if (!targetEmail) {
+      setError('No se identificó el correo electrónico. Vuelve a iniciar la recuperación.');
+      return;
+    }
+    setError(null);
     setLoading(true);
     try {
-      const targetEmail = email || (globalThis as any).__recoveryEmail || '';
       router.push({ pathname: '/(auth)/recover-new-password', params: { token: joined, email: targetEmail } });
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleResend = async () => {

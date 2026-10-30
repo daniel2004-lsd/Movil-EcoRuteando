@@ -57,7 +57,7 @@ const OBSTACLE_TYPES = [
   },
 ];
 
-  const userEmail = auth.email ?? t('home.guestUser');
+  const userEmail = auth.email ?? '';
 
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [showTypeList, setShowTypeList] = useState(false);

@@ -15,7 +15,6 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import apiClient from '../../src/shared/services/apiClient';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
-import { useAuth } from '../../src/shared/store/AuthContext';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -27,13 +26,9 @@ export default function StatsScreen() {
 
   const chartWidth = Math.min(screenWidth - 32, 900 - 32);
 
-  const { auth } = useAuth();
-  const isGuest = !!auth.guest;
-
   // Viajes reales del usuario (GET /api/trips).
   const [trips, setTrips] = useState<any[]>([]);
   const fetchStats = useCallback(async () => {
-    if (isGuest) return;
     try {
       const { data } = await apiClient.get('/api/trips');
       const items: any[] = Array.isArray(data) ? data : (data?.items ?? []);
@@ -41,7 +36,7 @@ export default function StatsScreen() {
     } catch (e: any) {
       console.warn('[stats] error:', e?.message, e?.response?.status);
     }
-  }, [isGuest]);
+  }, []);
 
   // Recarga cada vez que entras a la pantalla.
   useFocusEffect(
