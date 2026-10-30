@@ -79,20 +79,8 @@ export default function PlanRouteScreen() {
   const { theme } = useThemeMode();
   const { t } = useLanguage();
   const { auth } = useAuth();
-  const isGuest = !!auth.guest;
   const isDark = theme === 'dark';
   const insets = useSafeAreaInsets();
-
-  const requireAccount = (action: string) => {
-    Dialog.alert(
-      t('planRoute.needAccountTitle'),
-      t('planRoute.needAccountMsg').replace('{action}', action),
-      [
-        { text: t('planRoute.notNow'), style: 'cancel' },
-        { text: t('auth.loginButton'), onPress: () => router.push('/(auth)/login') },
-      ]
-    , { tone: 'info', icon: 'person-circle' });
-  };
 
   const isExpoGo = Constants.executionEnvironment === 'storeClient';
   console.log('[MAPA] execEnv =', Constants.executionEnvironment, '| isExpoGo =', isExpoGo, '| tema =', theme);
@@ -164,9 +152,10 @@ export default function PlanRouteScreen() {
   const lastTrackPosRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const tripStartedAtRef = useRef<number | null>(null);
   const reportRefreshTimer = useRef<any>(null);
+  const poiRequestIdRef = useRef(0);
 
   useEffect(() => {
-    getCurrentLocation();
+    getCurrentLocation(true);
     refreshNearbyReports();
   }, []);
 
@@ -221,7 +210,6 @@ export default function PlanRouteScreen() {
 
   // Carga los ids de favoritos del usuario para saber si la ruta actual lo es.
   useEffect(() => {
-    if (isGuest) return;
     let active = true;
     (async () => {
       try {
@@ -234,13 +222,17 @@ export default function PlanRouteScreen() {
       } catch {}
     })();
     return () => { active = false; };
-  }, [isGuest]);
+  }, []);
 
-  const getCurrentLocation = async () => {
+  const getCurrentLocation = async (silent = false) => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = silent
+        ? await Location.getForegroundPermissionsAsync()
+        : await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Dialog.alert(t('planRoute.permissionDeniedTitle'), t('planRoute.locationDeniedMsg'), { tone: 'warning', icon: 'location' });
+        if (!silent) {
+          Dialog.alert(t('planRoute.permissionDeniedTitle'), t('planRoute.locationDeniedMsg'), { tone: 'warning', icon: 'location' });
+        }
         return;
       }
 
@@ -262,7 +254,9 @@ export default function PlanRouteScreen() {
         longitudeDelta: 0.02,
       });
     } catch (error) {
-      console.error('Error getting location:', error);
+      if (!silent) {
+        console.error('Error getting location:', error);
+      }
     }
   };
 
@@ -542,7 +536,6 @@ export default function PlanRouteScreen() {
 
   const startTripFlow = async () => {
     console.log('[VIAJE] tap Iniciar viaje | route=', !!route, 'origin=', !!origin, 'dest=', !!destination, 'starting=', startingTrip);
-    if (isGuest) return requireAccount(t('planRoute.actionStartTrips'));
     if (!route || !origin || !destination || startingTrip) {
       if (!origin || !destination) {
         const fallbackOrigin = route?.steps?.[0]?.startLocation;
@@ -827,11 +820,8 @@ export default function PlanRouteScreen() {
   const handleExploreAction = (key: ExploreAction) => {
     if (key === 'plan') openSearch();
     else if (key === 'favorites') {
-      // Modo invitado: esas pantallas son de cuenta personal.
-      if (isGuest) return requireAccount(t('tabs.favorites'));
       router.push('/(tabs)/favorites');
     } else if (key === 'history') {
-      if (isGuest) return requireAccount(t('tabs.history'));
       router.push('/(tabs)/history');
     }
   };
@@ -850,6 +840,7 @@ export default function PlanRouteScreen() {
   };
 
   const closePoiSheet = () => {
+    poiRequestIdRef.current++;
     setActivePoiCategory(null);
     setPoiPlaces([]);
     setSelectedPoiId(null);
@@ -864,6 +855,7 @@ export default function PlanRouteScreen() {
       closePoiSheet();
       return;
     }
+    const currentReqId = ++poiRequestIdRef.current;
     setActivePoiCategory(category);
     setSelectedPoiId(null);
     // En modo "elegir parada" solo se muestran los markers en el mapa.
@@ -873,10 +865,20 @@ export default function PlanRouteScreen() {
       const center =
         centerOverride ?? { latitude: region.latitude, longitude: region.longitude };
       const places = await getNearbyPlaces(center, category.placeType, 5000);
+      if (poiRequestIdRef.current !== currentReqId) {
+        return;
+      }
       setPoiPlaces(places);
       console.log('[POI]', category.id, '→', places.length, 'lugares');
+    } catch (err) {
+      if (poiRequestIdRef.current === currentReqId) {
+        console.warn('Error fetching POIs:', err);
+        setPoiPlaces([]);
+      }
     } finally {
-      setLoadingPois(false);
+      if (poiRequestIdRef.current === currentReqId) {
+        setLoadingPois(false);
+      }
     }
   };
 
@@ -950,7 +952,6 @@ export default function PlanRouteScreen() {
   };
 
   const shareRoute = async () => {
-    if (isGuest) return requireAccount(t('planRoute.actionShare'));
     if (!route || !origin || !destination) return;
     try {
       await Share.share({
@@ -966,7 +967,6 @@ export default function PlanRouteScreen() {
 
   // ¿La ruta recién calculada ya está en Favoritos? (la busca por nombre)
   const refreshFavoriteFlag = async (o: PlacePoint, d: PlacePoint) => {
-    if (isGuest) return;
     try {
       const rid = await findRouteIdByName(buildSavePayload(o, d).name);
       setRouteFav(!!rid && favIdsRef.current.has(rid));
@@ -977,7 +977,6 @@ export default function PlanRouteScreen() {
 
   // Guardar en Favoritos / quitar de Favoritos (botón al lado de «Guardar»).
   const toggleFavorite = async () => {
-    if (isGuest) return requireAccount(t('tabs.favorites'));
     if (!route || !origin || !destination) return;
     try {
       let rid = routeSavedId;
@@ -1004,16 +1003,11 @@ export default function PlanRouteScreen() {
       }
     } catch (e: any) {
       const msg = apiErrorMessage(e);
-      if (msg.includes('iniciar sesión')) {
-        requireAccount(t('tabs.favorites'));
-      } else {
-        Dialog.alert(t('favorites.title'), msg || t('planRoute.unexpectedError'), { tone: 'error' });
-      }
+      Dialog.alert(t('favorites.title'), msg || t('planRoute.unexpectedError'), { tone: 'error' });
     }
   };
 
   const saveCurrentRoute = async () => {
-    if (isGuest) return requireAccount(t('planRoute.actionSave'));
     if (!route || !origin || !destination || routeSaved) return;
     try {
       const payload = buildSavePayload(origin, destination);
@@ -1037,11 +1031,7 @@ export default function PlanRouteScreen() {
     } catch (e: any) {
       const msg = apiErrorMessage(e);
       console.log('[RUTA] guardar ERROR:', msg || e?.message);
-      if (msg.includes('iniciar sesión')) {
-        requireAccount(t('planRoute.actionSave'));
-      } else {
-        Dialog.alert(t('planRoute.saveError'), msg || t('planRoute.unexpectedError'), { tone: 'error' });
-      }
+      Dialog.alert(t('planRoute.saveError'), msg || t('planRoute.unexpectedError'), { tone: 'error' });
     }
   };
 
@@ -1063,7 +1053,6 @@ export default function PlanRouteScreen() {
   };
 
   const voteOnReport = async (report: NearbyReport, confirm: boolean) => {
-    if (isGuest) return requireAccount(t('planRoute.actionVote'));
     if (votingId) return;
     let pos = userPos;
     if (!pos) {
@@ -1134,8 +1123,6 @@ export default function PlanRouteScreen() {
   };
 
   const openProfile = () => {
-    // Invitado: nunca abrimos el perfil; pedimos una cuenta.
-    if (isGuest) return requireAccount(t('tabs.profile'));
     router.push('/(tabs)/profile');
   };
 
@@ -1237,7 +1224,7 @@ export default function PlanRouteScreen() {
         }}
         region={region}
         provider={PROVIDER_GOOGLE}
-        showsUserLocation={true}
+        showsUserLocation={Boolean(userPos)}
         showsMyLocationButton={false}
         showsCompass={true}
         rotateEnabled={true}
@@ -1522,7 +1509,6 @@ export default function PlanRouteScreen() {
         <TouchableOpacity
           style={[styles.reportFab, { bottom: fabBottom }]}
           onPress={() => {
-            if (isGuest) return requireAccount(t('planRoute.actionReport'));
             setReportSheetOpen(true);
           }}
           activeOpacity={0.85}
@@ -1617,7 +1603,6 @@ export default function PlanRouteScreen() {
           <RouteBottomSheet
             route={route}
             estimate={estimate}
-            isGuest={isGuest}
             activeTripId={activeTripId}
             startingTrip={startingTrip}
             completing={completing}
@@ -1645,7 +1630,6 @@ export default function PlanRouteScreen() {
             onToggleFavorite={toggleFavorite}
             routeFavorited={routeFav}
             onReport={() => {
-              if (isGuest) return requireAccount(t('planRoute.actionReport'));
               setReportSheetOpen(true);
             }}
             routeSaved={routeSaved}

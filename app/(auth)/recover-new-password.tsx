@@ -39,24 +39,43 @@ export default function RecoverNewPasswordScreen() {
 
   const handleSubmit = async () => {
     setError(null);
-    const resolvedToken = token || (globalThis as any).__recoveryToken || '';
+    const resolvedToken = (token || (globalThis as any).__recoveryToken || '').trim();
+    const resolvedEmail = (email || (globalThis as any).__recoveryEmail || '').trim();
+
     if (!resolvedToken) {
       setError('No se encontró el código de verificación. Vuelve a solicitarlo.');
       return;
     }
-    if (pass.length < 8) { setError(t('auth.passwordMin8Error')); return; }
-    if (pass !== pass2) { setError(t('auth.passwordMismatch')); return; }
+    if (!resolvedEmail) {
+      setError('No se identificó el correo electrónico asociado. Vuelve a iniciar el proceso.');
+      return;
+    }
+    if (pass.length < 8) {
+      setError(t('auth.passwordMin8Error') ?? 'La contraseña debe contener al menos 8 caracteres.');
+      return;
+    }
+    if (pass !== pass2) {
+      setError(t('auth.passwordMismatch') ?? 'Las contraseñas no coinciden.');
+      return;
+    }
+    if (!/[A-Z]/.test(pass) || !/[0-9]/.test(pass)) {
+      setError('La contraseña debe contener al menos una mayúscula y un número.');
+      return;
+    }
     setLoading(true);
     try {
       await apiClient.post('/api/auth/reset-password', {
         token: resolvedToken,
         newPassword: pass,
-        email: email || (globalThis as any).__recoveryEmail || undefined
+        email: resolvedEmail
       });
       setSuccess(true);
     } catch (err: any) {
-      setError(err?.response?.data?.message || err?.response?.data?.detail || t('auth.resetPassError'));
-    } finally { setLoading(false); }
+      const serverMsg = err?.response?.data?.message || err?.response?.data?.detail;
+      setError(serverMsg || t('auth.resetPassError') || 'Error al restablecer la contraseña.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (success) {

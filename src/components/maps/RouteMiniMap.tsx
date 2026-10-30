@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { View, Image, StyleSheet, Text, ActivityIndicator } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import MapView, { Marker, Polyline } from './MapEngine';
 
 interface RouteMiniMapProps {
   startLat?: number | null;
@@ -70,7 +71,6 @@ export function getStaticMapUrl({
   let eLatitude = endLat;
   let eLongitude = endLng;
 
-  // Si no hay coordenadas pero sí polyline, decodificar primer y último punto
   if ((sLatitude == null || sLongitude == null) && encodedPolyline && encodedPolyline.trim().length > 0) {
     try {
       const decoded = decodePolyline(encodedPolyline.trim());
@@ -109,7 +109,6 @@ export function getStaticMapUrl({
     params.push('style=feature:poi.park%7Celement:geometry%7Ccolor:0x064e3b');
   }
 
-  // Pin verde de origen
   params.push(`markers=color:0x10b981%7Csize:mid%7Clabel:A%7C${sLat},${sLng}`);
 
   const validEnd = endLat != null && endLng != null && Number.isFinite(Number(endLat)) && Number.isFinite(Number(endLng));
@@ -117,7 +116,6 @@ export function getStaticMapUrl({
     const eLat = Number(endLat).toFixed(5);
     const eLng = Number(endLng).toFixed(5);
 
-    // Pin rojo de destino
     params.push(`markers=color:0xef4444%7Csize:mid%7Clabel:B%7C${eLat},${eLng}`);
 
     if (encodedPolyline && encodedPolyline.trim().length > 0) {
@@ -141,21 +139,65 @@ export function RouteMiniMap({
   endLng,
   encodedPolyline,
   isDark = false,
-  height = 148,
+  height = 155,
 }: RouteMiniMapProps) {
-  const [imageError, setImageError] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const mapData = useMemo(() => {
+    let polyPoints: { latitude: number; longitude: number }[] = [];
+    if (encodedPolyline && encodedPolyline.trim().length > 0) {
+      try {
+        polyPoints = decodePolyline(encodedPolyline.trim());
+      } catch {
+        polyPoints = [];
+      }
+    }
 
-  const mapUrl = getStaticMapUrl({
-    startLat,
-    startLng,
-    endLat,
-    endLng,
-    encodedPolyline,
-    isDark,
-  });
+    const sLat = startLat != null ? Number(startLat) : polyPoints.length > 0 ? polyPoints[0].latitude : null;
+    const sLng = startLng != null ? Number(startLng) : polyPoints.length > 0 ? polyPoints[0].longitude : null;
+    const eLat = endLat != null ? Number(endLat) : polyPoints.length > 1 ? polyPoints[polyPoints.length - 1].latitude : null;
+    const eLng = endLng != null ? Number(endLng) : polyPoints.length > 1 ? polyPoints[polyPoints.length - 1].longitude : null;
 
-  if (!mapUrl || imageError) {
+    if (polyPoints.length === 0 && sLat != null && sLng != null && eLat != null && eLng != null) {
+      polyPoints = [
+        { latitude: sLat, longitude: sLng },
+        { latitude: eLat, longitude: eLng },
+      ];
+    }
+
+    const allLats: number[] = polyPoints.map(p => p.latitude);
+    const allLngs: number[] = polyPoints.map(p => p.longitude);
+    if (sLat != null && Number.isFinite(sLat)) allLats.push(sLat);
+    if (sLng != null && Number.isFinite(sLng)) allLngs.push(sLng);
+    if (eLat != null && Number.isFinite(eLat)) allLats.push(eLat);
+    if (eLng != null && Number.isFinite(eLng)) allLngs.push(eLng);
+
+    if (allLats.length === 0 || allLngs.length === 0) {
+      return null;
+    }
+
+    const minLat = Math.min(...allLats);
+    const maxLat = Math.max(...allLats);
+    const minLng = Math.min(...allLngs);
+    const maxLng = Math.max(...allLngs);
+
+    const midLat = (minLat + maxLat) / 2;
+    const midLng = (minLng + maxLng) / 2;
+    const latDelta = Math.max((maxLat - minLat) * 1.5, 0.01);
+    const lngDelta = Math.max((maxLng - minLng) * 1.5, 0.01);
+
+    return {
+      points: polyPoints,
+      start: sLat != null && sLng != null ? { latitude: sLat, longitude: sLng } : null,
+      end: eLat != null && eLng != null ? { latitude: eLat, longitude: eLng } : null,
+      region: {
+        latitude: midLat,
+        longitude: midLng,
+        latitudeDelta: latDelta,
+        longitudeDelta: lngDelta,
+      },
+    };
+  }, [startLat, startLng, endLat, endLng, encodedPolyline]);
+
+  if (!mapData) {
     return (
       <View style={[styles.placeholder, isDark ? styles.placeholderDark : styles.placeholderLight, { height }]}>
         <View style={styles.gridPattern}>
@@ -166,7 +208,7 @@ export function RouteMiniMap({
             <View style={[styles.dot, { backgroundColor: '#ef4444' }]} />
           </View>
           <Text style={[styles.placeholderText, isDark && { color: '#64748b' }]}>
-            {startLat && endLat ? 'Recorrido trazado' : 'Coordenadas no disponibles'}
+            Coordenadas no disponibles
           </Text>
         </View>
       </View>
@@ -174,22 +216,44 @@ export function RouteMiniMap({
   }
 
   return (
-    <View style={[styles.container, { height }, isDark && styles.containerDark]}>
-      <Image
-        source={{ uri: mapUrl }}
-        style={styles.image}
-        resizeMode="cover"
-        onLoadEnd={() => setLoading(false)}
-        onError={() => {
-          setImageError(true);
-          setLoading(false);
-        }}
-      />
-      {loading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="small" color="#10b981" />
-        </View>
-      )}
+    <View style={[styles.container, { height }, isDark && styles.containerDark]} pointerEvents="none">
+      <MapView
+        style={StyleSheet.absoluteFill}
+        initialRegion={mapData.region}
+        region={mapData.region}
+        liteMode={true}
+        scrollEnabled={false}
+        zoomEnabled={false}
+        rotateEnabled={false}
+        pitchEnabled={false}
+        showsUserLocation={false}
+        showsMyLocationButton={false}
+        showsCompass={false}
+        toolbarEnabled={false}
+        cacheEnabled={true}
+      >
+        {mapData.points.length > 1 && (
+          <Polyline
+            coordinates={mapData.points}
+            strokeColor="#10b981"
+            strokeWidth={4}
+          />
+        )}
+        {mapData.start && (
+          <Marker
+            coordinate={mapData.start}
+            pinColor="#10b981"
+            title="Origen"
+          />
+        )}
+        {mapData.end && (
+          <Marker
+            coordinate={mapData.end}
+            pinColor="#ef4444"
+            title="Destino"
+          />
+        )}
+      </MapView>
     </View>
   );
 }
@@ -203,16 +267,6 @@ const styles = StyleSheet.create({
   },
   containerDark: {
     backgroundColor: '#0B1215',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-  },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(15, 23, 42, 0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   placeholder: {
     width: '100%',

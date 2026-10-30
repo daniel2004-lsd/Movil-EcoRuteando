@@ -7,7 +7,8 @@
     "demo": "bash scripts/start-demo.sh",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "node --test src/__tests__/*.test.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/playfair-display": "^0.4.2",
@@ -18,9 +19,7 @@
     "@types/react": "~19.2.4",
     "axios": "^1.17.0",
     "expo": "57.0.24",
-    "expo-auth-session": "~57.0.12",
     "expo-constants": "~57.0.19",
-    "expo-crypto": "~57.0.3",
     "expo-file-system": "~57.0.7",
     "expo-font": "~57.0.4",
     "expo-image-picker": "~57.0.20",
@@ -35,7 +34,6 @@
     "expo-speech": "~57.0.3",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
-    "expo-web-browser": "~57.0.3",
     "i18next": "^26.0.8",
     "nativewind": "^2.0.11",
     "react": "19.2.3",

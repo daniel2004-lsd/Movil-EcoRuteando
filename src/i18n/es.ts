@@ -521,9 +521,6 @@ export default {
     passwordMedium: 'Contraseña media',
     passwordStrongLabel: 'Contraseña fuerte',
 
-    // SOCIAL
-    orContinueWith: 'O continúa con',
-
     // AUTH SCREENS (login / register / recover / verify-code)
     loggingIn: 'Iniciando sesión...',
     loginTagline: 'Cada viaje sostenible comienza con un paso',
@@ -532,7 +529,7 @@ export default {
     firstNameLabel: 'Nombre',
     firstNamePlaceholder: 'Tu nombre',
     lastNameLabel: 'Apellido',
-    lastNamePlaceholder: 'Salazar',
+    lastNamePlaceholder: 'Tu apellido',
     emailValid: 'Correo válido',
     pwCheckUppercase: 'Al menos una mayúscula',
     pwCheckNumber: 'Al menos un número',
@@ -540,7 +537,6 @@ export default {
     confirmPasswordPlaceholder: 'Repite tu contraseña',
     passwordMatch: 'Las contraseñas coinciden',
     passwordMinShort: 'Mín. 8 caracteres',
-    orRegisterWith: 'O regístrate con',
     registering: 'Registrando...',
     recoverTitle: 'Recuperar contraseña',
     recoverSubtitle: 'Ingresa tu correo electrónico y te enviaremos un código de verificación de 6 dígitos para restablecer tu contraseña.',
@@ -576,13 +572,7 @@ export default {
     emailAlreadyRegistered: 'El correo ya está registrado.',
     alreadyRegisteredTitle: 'Ya estás registrado',
     alreadyRegisteredMsg: 'Este correo ya tiene una cuenta. ¿Quieres iniciar sesión o reenviar el código de verificación?',
-    alreadyRegisteredOAuthMsg: 'Este correo ya tiene una cuenta en EcoRuteando. Inicia sesión para continuar.',
     registerErrorFallback: 'No fue posible registrar el usuario',
-    oauthCancelledTitle: 'Inicio con Google cancelado',
-    oauthCancelledMsg: 'No completaste el inicio de sesión con Google.',
-    oauthErrorTitle: 'No se pudo iniciar con Google',
-    oauthNoCode: 'Google no devolvió el código de autorización. Inténtalo de nuevo.',
-    oauthNoToken: 'Google no devolvió un token de acceso válido. Inténtalo de nuevo.',
     cancel: 'Cancelar',
     errorTitle: 'Error',
 
@@ -758,8 +748,7 @@ export default {
 
     account: {
       title: 'Configuración de cuenta',
-      subtitle:
-        'Idioma, tema y exportación de información según los requerimientos del SRS.',
+      subtitle: '',
 
       language: 'Idioma de la interfaz',
       export: 'Exportar mis datos',
