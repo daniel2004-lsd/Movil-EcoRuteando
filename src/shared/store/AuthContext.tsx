@@ -1,20 +1,22 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as SecureStore from '../services/keyStorage';
+import { onSessionExpired } from '../services/authEvents';
 import { requestPushPermissions, getExpoPushToken, registerDeviceOnBackend, isExpoGo } from '../services/pushNotificationService';
 
 type Role = 'user' | 'admin';
 
-type AuthState = {
+export type AuthState = {
   email: string | null;
   role: Role | null;
   userId: string | null;
   firstName: string | null;
-  guest?: boolean;
+  isAuthenticated: boolean;
 };
 
 type AuthContextType = {
   auth: AuthState;
   isLoading: boolean;
+  isAuthenticated: boolean;
   signIn: (params: {
     accessToken: string;
     refreshToken: string;
@@ -24,7 +26,6 @@ type AuthContextType = {
     firstName?: string;
   }) => Promise<void>;
   signOut: () => Promise<void>;
-  enterGuest: () => Promise<void>;
   setAuth: (value: AuthState) => void;
 };
 
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role: null,
     userId: null,
     firstName: null,
+    isAuthenticated: false,
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -45,28 +47,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const stored = await SecureStore.getItemAsync(AUTH_STORAGE_KEY);
+        const accessToken = await SecureStore.getItemAsync('accessToken');
+
         if (stored) {
           const parsed = JSON.parse(stored);
-          const accessToken = await SecureStore.getItemAsync('accessToken');
+          // Si existía un estado previo de invitado, se invalida de inmediato
           if (parsed?.guest) {
-            // Invitado = sin sesión. Si quedó un token de un inicio de sesión
-            // anterior, lo borramos: si no, apiClient seguiría mandando
-            // Authorization con la cuenta real y el invitado vería los datos
-            // de esa persona (historial, favoritos, etc.).
+            await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
             if (accessToken) {
               await SecureStore.deleteItemAsync('accessToken');
               await SecureStore.deleteItemAsync('refreshToken');
               await SecureStore.deleteItemAsync('userId');
             }
-            setAuth(parsed);
-          } else if (accessToken) {
-            setAuth(parsed);
+            setAuth({
+              email: null,
+              role: null,
+              userId: null,
+              firstName: null,
+              isAuthenticated: false,
+            });
+          } else if (accessToken && parsed?.email) {
+            // Sesión legítima con token existente
+            setAuth({
+              email: parsed.email,
+              role: parsed.role || 'user',
+              userId: parsed.userId || null,
+              firstName: parsed.firstName || null,
+              isAuthenticated: true,
+            });
+          } else {
+            setAuth({
+              email: null,
+              role: null,
+              userId: null,
+              firstName: null,
+              isAuthenticated: false,
+            });
           }
+        } else {
+          setAuth({
+            email: null,
+            role: null,
+            userId: null,
+            firstName: null,
+            isAuthenticated: false,
+          });
         }
-      } catch {} finally {
+      } catch {
+        setAuth({
+          email: null,
+          role: null,
+          userId: null,
+          firstName: null,
+          isAuthenticated: false,
+        });
+      } finally {
         setIsLoading(false);
       }
     })();
+  }, []);
+
+  // Sincronización inmediata cuando el refresh token falla definitivamente en background
+  useEffect(() => {
+    const unsubscribe = onSessionExpired(async () => {
+      // 1. Invalida de inmediato el estado en memoria para que el Route Guard reaccione al instante
+      setAuth({
+        email: null,
+        role: null,
+        userId: null,
+        firstName: null,
+        isAuthenticated: false,
+      });
+
+      // 2. Purgar credenciales en almacenamiento seguro de forma asíncrona
+      try {
+        await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+        await SecureStore.deleteItemAsync('accessToken');
+        await SecureStore.deleteItemAsync('refreshToken');
+        await SecureStore.deleteItemAsync('userId');
+        await SecureStore.deleteItemAsync('profileAvatarUri');
+      } catch {}
+    });
+    return () => unsubscribe();
   }, []);
 
   const signIn = async (params: {
@@ -85,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: (params.role as Role) || 'user',
       userId: params.userId || null,
       firstName: params.firstName || null,
+      isAuthenticated: true,
     };
 
     await SecureStore.setItemAsync(AUTH_STORAGE_KEY, JSON.stringify(authData));
@@ -113,31 +176,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await SecureStore.deleteItemAsync('refreshToken');
     await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
     await SecureStore.deleteItemAsync('profileAvatarUri');
-    setAuth({ email: null, role: null, userId: null, firstName: null });
+    setAuth({ email: null, role: null, userId: null, firstName: null, isAuthenticated: false });
   };
 
-  const enterGuest = async () => {
-    // Primero cerramos cualquier sesión guardada: entrar de invitado debe
-    // dejar la app SIN token, o la API seguiría actuando como el usuario
-    // que había entrado antes (bug: el invitado veía la cuenta real).
-    await SecureStore.deleteItemAsync('accessToken');
-    await SecureStore.deleteItemAsync('refreshToken');
-    await SecureStore.deleteItemAsync('userId');
-    await SecureStore.deleteItemAsync('profileAvatarUri');
-
-    const authData: AuthState = {
-      email: null,
-      role: null,
-      userId: null,
-      firstName: null,
-      guest: true,
-    };
-    await SecureStore.setItemAsync(AUTH_STORAGE_KEY, JSON.stringify(authData));
-    setAuth(authData);
-  };
+  const isAuthenticated = auth.isAuthenticated;
 
   return (
-    <AuthContext.Provider value={{ auth, isLoading, signIn, signOut, enterGuest, setAuth }}>
+    <AuthContext.Provider value={{ auth, isLoading, isAuthenticated, signIn, signOut, setAuth }}>
       {children}
     </AuthContext.Provider>
   );

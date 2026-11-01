@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useAuth } from '../../src/shared/store/AuthContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
@@ -16,6 +17,7 @@ const MODULES = [
   { id:'historial', icon:'time', titleKey:'home.modHistory', subKey:'home.modHistorySub', colors:['#a855f7','#7c3aed'] },
   { id:'perfil', icon:'person', titleKey:'home.modProfile', subKey:'home.modProfileSub', colors:['#14b8a6','#0891b2'] },
   { id:'alertas', icon:'warning', titleKey:'home.modAlerts', subKey:'home.modAlertsSub', colors:['#f59e0b','#ea580c'] },
+  { id:'stats', icon:'stats-chart', titleKey:'home.seeStats', subKey:'home.impactCardTitle', colors:['#10b981','#047857'] },
 ];
 
 export default function HomeScreen() {
@@ -24,7 +26,6 @@ export default function HomeScreen() {
   const { auth, signOut } = useAuth();
   const { t } = useLanguage();
   const isDark = theme === 'dark';
-  const isGuest = !!auth.guest;
 
   // El saludo toma SIEMPRE el nombre del perfil (/api/auth/me) y la foto de perfil:
   // si se edita en Perfil, al volver aquí queda actualizado.
@@ -54,7 +55,7 @@ export default function HomeScreen() {
       } catch {}
     })();
     return () => { active = false; };
-  }, []));
+  }, [auth.userId]));
 
   // Estadísticas reales del usuario (viajes + favoritos).
   const [homeStats, setHomeStats] = useState<{
@@ -62,7 +63,6 @@ export default function HomeScreen() {
   } | null>(null);
   useFocusEffect(useCallback(() => {
     let active = true;
-    if (isGuest) { setHomeStats(null); return; }
     (async () => {
       try {
         const [tripsRes, favsRes] = await Promise.all([
@@ -82,7 +82,7 @@ export default function HomeScreen() {
       } catch {}
     })();
     return () => { active = false; };
-  }, [isGuest]));
+  }, []));
 
   // Muestra: dato real si hay, "—" si no hay sesión o aún no cargó.
   const stat = (v?: string) => (homeStats ? v : '—');
@@ -93,13 +93,21 @@ export default function HomeScreen() {
 
   // Se muestra solo la primera palabra del nombre del perfil.
   const firstWord = (v?: string | null) => (v || '').trim().split(' ')[0] || '';
-  // Invitado: nombre neutro. Nunca datos de otra persona.
-  const userName = isGuest
-    ? t('home.guestUser')
-    : firstWord(profileName)
-      || firstWord(auth.firstName)
-      || (auth.email ? auth.email.split('@')[0] : '')
-      || t('home.defaultUser');
+  const userName =
+    firstWord(profileName)
+    || firstWord(auth.firstName)
+    || (auth.email ? auth.email.split('@')[0] : '')
+    || t('home.defaultUser');
+
+  const handleModulePress = (id: string) => {
+    if (id === 'plan_ruta') router.push('/(tabs)/plan-route');
+    else if (id === 'mis_rutas') router.push('/(tabs)/saved-routes');
+    else if (id === 'historial') router.push('/(tabs)/history');
+    else if (id === 'perfil') router.push('/(tabs)/profile');
+    else if (id === 'alertas') router.push('/(tabs)/alerts');
+    else if (id === 'stats') router.push('/(tabs)/stats');
+    else router.push('/(tabs)/plan-route');
+  };
 
   return (
     <View style={[s.page, isDark && s.pageDark]}>
@@ -110,17 +118,15 @@ export default function HomeScreen() {
         </View>
 
         <View style={s.headerRight}>
-          {!isGuest && (
-            <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={s.avatarHeaderBtn} activeOpacity={0.8}>
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={s.headerAvatar} />
-              ) : (
-                <View style={[s.headerAvatarPlaceholder, isDark && { backgroundColor: '#1e293b' }]}>
-                  <Ionicons name="person" size={16} color={isDark ? '#34d399' : '#059669'} />
-                </View>
-              )}
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={s.avatarHeaderBtn} activeOpacity={0.8}>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={s.headerAvatar} />
+            ) : (
+              <View style={[s.headerAvatarPlaceholder, isDark && { backgroundColor: '#1e293b' }]}>
+                <Ionicons name="person" size={16} color={isDark ? '#34d399' : '#059669'} />
+              </View>
+            )}
+          </TouchableOpacity>
 
           <TouchableOpacity onPress={async()=>{await signOut(); router.replace('/(auth)/login');}} style={[s.logoutBtn, isDark&&{backgroundColor:'#162329',borderColor:'#26383D'}]}>
             <Ionicons name="log-out-outline" size={16} color={isDark?'#e2e8f0':'#4b5563'} />
@@ -136,80 +142,123 @@ export default function HomeScreen() {
               <Text style={[s.greetingTitle, isDark&&{color:'#e2e8f0'}]}>{t('home.hello')}, {userName} 👋</Text>
               <Text style={[s.greetingSub, isDark&&{color:'#94a3b8'}]}>{t('home.greetingSub')}</Text>
             </View>
-            {!isGuest && (
-              <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} activeOpacity={0.85} style={s.greetingAvatarWrap}>
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={s.greetingAvatar} />
-                ) : (
-                  <View style={[s.greetingAvatarPlaceholder, isDark && { backgroundColor: '#1e293b' }]}>
-                    <Ionicons name="person" size={24} color={isDark ? '#34d399' : '#059669'} />
-                  </View>
-                )}
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} activeOpacity={0.85} style={s.greetingAvatarWrap}>
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={s.greetingAvatar} />
+              ) : (
+                <View style={[s.greetingAvatarPlaceholder, isDark && { backgroundColor: '#1e293b' }]}>
+                  <Ionicons name="person" size={24} color={isDark ? '#34d399' : '#059669'} />
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
           <View style={s.statsGrid}>
-            <View style={[s.statCard, isDark&&s.statCardDark]}>
-              <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(16,185,129,0.2)'}]}><Ionicons name="leaf" size={20} color={isDark?'#34D399':'#fff'} /></View>
-              <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>{co2Shown}</Text>
-              <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statCo2')}</Text>
+            <View style={s.statsRow}>
+              <View style={[s.statCard, isDark && s.statCardDark]}>
+                <View style={[s.statIcon, { backgroundColor: isDark ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.12)' }]}>
+                  <Ionicons name="leaf" size={22} color={isDark ? '#34D399' : '#059669'} />
+                </View>
+                <Text style={[s.statValue, isDark && { color: '#e2e8f0' }]}>{co2Shown}</Text>
+                <Text style={[s.statLabel, isDark && { color: '#94a3b8' }]}>{t('home.statCo2')}</Text>
+              </View>
+
+              <View style={[s.statCard, isDark && s.statCardDark]}>
+                <View style={[s.statIcon, { backgroundColor: isDark ? 'rgba(6,182,214,0.2)' : 'rgba(6,182,214,0.12)' }]}>
+                  <Ionicons name="navigate" size={22} color={isDark ? '#22d3ee' : '#0284c7'} />
+                </View>
+                <Text style={[s.statValue, isDark && { color: '#e2e8f0' }]}>{tripsShown}</Text>
+                <Text style={[s.statLabel, isDark && { color: '#94a3b8' }]}>{t('home.statTrips')}</Text>
+              </View>
             </View>
-            <View style={[s.statCard, isDark&&s.statCardDark]}>
-              <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(6,182,214,0.2)'}]}><Ionicons name="navigate" size={20} color={isDark?'#22d3ee':'#fff'} /></View>
-              <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>{tripsShown}</Text>
-              <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statTrips')}</Text>
+
+            <View style={s.statsRow}>
+              <View style={[s.statCard, isDark && s.statCardDark]}>
+                <View style={[s.statIcon, { backgroundColor: isDark ? 'rgba(168,85,247,0.2)' : 'rgba(168,85,247,0.12)' }]}>
+                  <Ionicons name="time" size={22} color={isDark ? '#c084fc' : '#7c3aed'} />
+                </View>
+                <Text style={[s.statValue, isDark && { color: '#e2e8f0' }]}>{timeShown}</Text>
+                <Text style={[s.statLabel, isDark && { color: '#94a3b8' }]}>{t('home.statTime')}</Text>
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  router.push({ pathname: '/(tabs)/saved-routes', params: { tab: 'favorites' } });
+                }}
+                style={[s.statCard, isDark && s.statCardDark]}
+              >
+                <View style={[s.statIcon, { backgroundColor: isDark ? 'rgba(244,63,94,0.2)' : 'rgba(244,63,94,0.12)' }]}>
+                  <Ionicons name="heart" size={22} color={isDark ? '#fb7185' : '#e11d48'} />
+                </View>
+                <Text style={[s.statValue, isDark && { color: '#e2e8f0' }]}>{favsShown}</Text>
+                <Text style={[s.statLabel, isDark && { color: '#94a3b8' }]}>{t('home.statFavs')}</Text>
+              </TouchableOpacity>
             </View>
-            <View style={[s.statCard, isDark&&s.statCardDark]}>
-              <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(168,85,247,0.2)'}]}><Ionicons name="time" size={20} color={isDark?'#c084fc':'#fff'} /></View>
-              <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>{timeShown}</Text>
-              <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statTime')}</Text>
-            </View>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => {
-                if (isGuest) return Dialog.alert(t('planRoute.needAccountTitle'), t('planRoute.needAccountMsg').replace('{action}', t('savedRoutes.favoritesTab')), [{ text: t('planRoute.notNow'), style: 'cancel' }, { text: t('auth.loginButton'), onPress: () => router.push('/(auth)/login') }], { tone: 'info', icon: 'person-circle' });
-                router.push({ pathname: '/(tabs)/saved-routes', params: { tab: 'favorites' } });
-              }}
-              style={[s.statCard, isDark&&s.statCardDark]}
-            >
-              <View style={[s.statIcon, isDark&&{backgroundColor:'rgba(244,63,94,0.2)'}]}><Ionicons name="heart" size={20} color={isDark?'#fb7185':'#fff'} /></View>
-              <Text style={[s.statValue, isDark&&{color:'#e2e8f0'}]}>{favsShown}</Text>
-              <Text style={[s.statLabel, isDark&&{color:'#94a3b8'}]}>{t('home.statFavs')}</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
+        {/* Sección de Módulos estrictamente en 2 columnas */}
         <View style={s.toolsHeader}>
           <Text style={[s.toolsTitle, isDark&&{color:'#e2e8f0'}]}>{t('home.tools')}</Text>
           <Text style={[s.toolsCount, isDark&&{color:'#94a3b8'}]}>{MODULES.length} {t('home.modulesCount')}</Text>
         </View>
 
         <View style={s.modulesGrid}>
-          {MODULES.map(m=>(
-            <TouchableOpacity key={m.id} onPress={()=>{
-              const needAccount = (action: string) => Dialog.alert(
-                t('planRoute.needAccountTitle'),
-                t('planRoute.needAccountMsg').replace('{action}', action),
-                [
-                  { text: t('planRoute.notNow'), style: 'cancel' },
-                  { text: t('auth.loginButton'), onPress: () => router.push('/(auth)/login') },
-                ],
-                { tone: 'info', icon: 'person-circle' }
-              );
-              if(m.id==='plan_ruta') router.push('/(tabs)/plan-route');
-              else if(m.id==='mis_rutas') { if(isGuest) return needAccount(t('savedRoutes.title')); router.push('/(tabs)/saved-routes'); }
-              else if(m.id==='historial') { if(isGuest) return needAccount(t('tabs.history')); router.push('/(tabs)/history'); }
-              else if(m.id==='perfil') { if(isGuest) return needAccount(t('tabs.profile')); router.push('/(tabs)/profile'); }
-              else if(m.id==='alertas') { if(isGuest) return needAccount(t('alerts.title')); router.push('/(tabs)/alerts'); }
-              else router.push('/(tabs)/plan-route');
-            }} style={[s.moduleCard, isDark&&s.moduleCardDark]}>
-              <View style={[s.moduleIcon, isDark&&{backgroundColor:`${m.colors[0]}33`}]}>
-                <Ionicons name={m.icon as any} size={24} color={isDark?m.colors[0]:'#fff'} />
+          {Array.from({ length: Math.ceil(MODULES.length / 2) }).map((_, rIdx) => {
+            const m1 = MODULES[rIdx * 2];
+            const m2 = MODULES[rIdx * 2 + 1];
+            return (
+              <View key={rIdx} style={s.modulesRow}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => handleModulePress(m1.id)}
+                  style={[s.moduleCard, isDark && s.moduleCardDark]}
+                >
+                  <View style={s.cardTopRow}>
+                    <View style={[
+                      s.moduleIcon,
+                      { backgroundColor: isDark ? `${m1.colors[0]}28` : `${m1.colors[0]}16` }
+                    ]}>
+                      <Ionicons name={m1.icon as any} size={22} color={m1.colors[0]} />
+                    </View>
+                    <View style={[s.cardChevron, isDark && { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
+                      <Ionicons name="chevron-forward" size={14} color={isDark ? '#64748b' : '#9ca3af'} />
+                    </View>
+                  </View>
+                  <Text style={[s.moduleTitle, isDark && { color: '#f1f5f9' }]}>{t(m1.titleKey)}</Text>
+                  <Text style={[s.moduleSub, isDark && { color: '#94a3b8' }]} numberOfLines={2}>
+                    {t(m1.subKey)}
+                  </Text>
+                </TouchableOpacity>
+
+                {m2 ? (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => handleModulePress(m2.id)}
+                    style={[s.moduleCard, isDark && s.moduleCardDark]}
+                  >
+                    <View style={s.cardTopRow}>
+                      <View style={[
+                        s.moduleIcon,
+                        { backgroundColor: isDark ? `${m2.colors[0]}28` : `${m2.colors[0]}16` }
+                      ]}>
+                        <Ionicons name={m2.icon as any} size={22} color={m2.colors[0]} />
+                      </View>
+                      <View style={[s.cardChevron, isDark && { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
+                        <Ionicons name="chevron-forward" size={14} color={isDark ? '#64748b' : '#9ca3af'} />
+                      </View>
+                    </View>
+                    <Text style={[s.moduleTitle, isDark && { color: '#f1f5f9' }]}>{t(m2.titleKey)}</Text>
+                    <Text style={[s.moduleSub, isDark && { color: '#94a3b8' }]} numberOfLines={2}>
+                      {t(m2.subKey)}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={{ flex: 1 }} />
+                )}
               </View>
-              <Text style={[s.moduleTitle, isDark&&{color:'#e2e8f0'}]}>{t(m.titleKey)}</Text>
-              <Text style={[s.moduleSub, isDark&&{color:'#94a3b8'}]}>{t(m.subKey)}</Text>
-            </TouchableOpacity>
-          ))}
+            );
+          })}
         </View>
 
         <View style={[s.impactCard, isDark&&{backgroundColor:'#064e3b'}]}>
@@ -224,6 +273,7 @@ export default function HomeScreen() {
     </View>
   );
 }
+
 const s = StyleSheet.create({
   page:{flex:1,backgroundColor:'#f0fdf4'},
   pageDark:{backgroundColor:'#0B1215'},
@@ -248,21 +298,159 @@ const s = StyleSheet.create({
   greetingAvatarPlaceholder:{width:'100%',height:'100%',backgroundColor:'#dcfce7',alignItems:'center',justifyContent:'center'},
   greetingTitle:{fontSize:22,fontWeight:'800',color:'#1f2937'},
   greetingSub:{fontSize:12,color:'#6b7280',marginTop:4},
-  statsGrid:{flexDirection:'row',flexWrap:'wrap',gap:12,marginTop:16},
-  statCard:{width:'48%',backgroundColor:'#fff',borderRadius:16,padding:12,borderWidth:1,borderColor:'#f3f4f6',alignItems:'center'},
+  statsGrid:{gap:12,marginTop:16},
+  statsRow:{flexDirection:'row',gap:12},
+  statCard:{
+    flex:1,
+    backgroundColor:'#fff',
+    borderRadius:18,
+    paddingVertical:16,
+    paddingHorizontal:10,
+    borderWidth:1,
+    borderColor:'#f1f5f9',
+    alignItems:'center',
+    shadowColor:'#000',
+    shadowOpacity:0.04,
+    shadowRadius:8,
+    shadowOffset:{width:0,height:2},
+    elevation:2,
+  },
   statCardDark:{backgroundColor:'rgba(11,18,21,0.4)',borderColor:'#26383D'},
-  statIcon:{width:44,height:44,borderRadius:12,backgroundColor:'#10b981',alignItems:'center',justifyContent:'center',marginBottom:8},
-  statValue:{fontSize:20,fontWeight:'800',color:'#1f2937'},
-  statLabel:{fontSize:10,color:'#6b7280'},
+  statIcon:{width:44,height:44,borderRadius:13,alignItems:'center',justifyContent:'center',marginBottom:8},
+  statValue:{fontSize:19,fontWeight:'800',color:'#1f2937'},
+  statLabel:{fontSize:11,color:'#6b7280',fontWeight:'600',marginTop:2},
   toolsHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-end',marginTop:24,marginBottom:12},
   toolsTitle:{fontSize:20,fontWeight:'800',color:'#1f2937'},
   toolsCount:{fontSize:10,color:'#9ca3af',fontWeight:'600'},
-  modulesGrid:{flexDirection:'row',flexWrap:'wrap',gap:12},
-  moduleCard:{width:'48%',backgroundColor:'#fff',borderRadius:16,padding:16,borderWidth:1,borderColor:'#f3f4f6',shadowColor:'#000',shadowOpacity:0.04,shadowRadius:8,shadowOffset:{width:0,height:2},elevation:1},
-  moduleCardDark:{backgroundColor:'#1f2937',borderColor:'#374151'},
-  moduleIcon:{width:48,height:48,borderRadius:12,alignItems:'center',justifyContent:'center',marginBottom:12,backgroundColor:'#10b981'},
-  moduleTitle:{fontSize:14,fontWeight:'700',color:'#1f2937'},
-  moduleSub:{fontSize:11,color:'#6b7280',marginTop:2},
+
+  // Módulo Principal Hero
+  heroModuleCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    marginBottom: 12,
+    shadowColor: '#10b981',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  heroModuleCardDark: {
+    borderColor: '#065f46',
+    backgroundColor: '#064e3b',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+  },
+  heroGradientBg: {
+    padding: 16,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
+    borderRadius: 20,
+  },
+  heroBadgeDark: {
+    backgroundColor: 'rgba(6,78,59,0.7)',
+  },
+  heroBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#047857',
+  },
+  heroArrowBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroArrowBtnDark: {
+    backgroundColor: 'rgba(6,78,59,0.8)',
+  },
+  heroBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  heroIconBox: {
+    shadowColor: '#059669',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  heroIconGradient: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroTextWrap: {
+    flex: 1,
+  },
+  heroTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#064e3b',
+    letterSpacing: -0.2,
+  },
+  heroSub: {
+    fontSize: 12,
+    color: '#047857',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+
+  // Módulos en 2 columnas (Filas flex)
+  modulesGrid:{gap:12},
+  modulesRow:{flexDirection:'row',gap:12},
+  moduleCard:{
+    flex:1,
+    backgroundColor:'#fff',
+    borderRadius:18,
+    padding:14,
+    borderWidth:1,
+    borderColor:'#e5e7eb',
+    shadowColor:'#000',
+    shadowOpacity:0.04,
+    shadowRadius:8,
+    shadowOffset:{width:0,height:2},
+    elevation:2,
+    justifyContent:'space-between',
+    minHeight:122,
+  },
+  moduleCardDark:{backgroundColor:'#162329',borderColor:'#26383D'},
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  moduleIcon:{width:42,height:42,borderRadius:12,alignItems:'center',justifyContent:'center'},
+  cardChevron: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moduleTitle:{fontSize:15,fontWeight:'700',color:'#1f2937'},
+  moduleSub:{fontSize:11,color:'#6b7280',marginTop:3,lineHeight:15},
+
   impactCard:{backgroundColor:'#059669',borderRadius:24,padding:20,marginTop:24,overflow:'hidden'},
   impactIcon:{width:56,height:56,borderRadius:16,backgroundColor:'rgba(255,255,255,0.2)',alignItems:'center',justifyContent:'center',marginBottom:12},
   impactTitle:{fontSize:20,fontWeight:'800',color:'#fff'},
