@@ -36,5 +36,8 @@ jobs:
       - name: Verify TypeScript types
         run: npm run typecheck
 
+      - name: Scan for exposed secrets & credentials
+        run: npm run scan:secrets
+
       - name: Run unit tests
         run: npm test

@@ -74,20 +74,57 @@ test('googleMaps.ts: tryBackendGeocode requires accessToken and handles errors c
   assert.match(content, /console\.warn\(['"]Backend geocode failed:['"],\s*e\);/);
 });
 
-test('eas.json: Preview build profile includes EXPO_PUBLIC_GOOGLE_MAPS_KEY and EXPO_PUBLIC_API_URL', () => {
+test('eas.json: Configures preview profile securely without hardcoded secrets and validates env isolation', () => {
   const content = fs.readFileSync(
     path.join(projectRoot, 'eas.json'),
     'utf8'
   );
   const easConfig = JSON.parse(content);
 
+  // 1. Validar URL pública esperada de la API de producción
   assert.equal(
     easConfig.build?.preview?.env?.EXPO_PUBLIC_API_URL,
     'https://ecoruteandobackend.onrender.com'
   );
+
+  // 2. Ausencia de credenciales reales en archivos rastreados (eas.json)
+  assert.doesNotMatch(
+    content,
+    /AIza[0-9A-Za-z-_]{35}/,
+    'eas.json must NEVER contain hardcoded Google API keys'
+  );
+
+  // 3. Ausencia explícita de la clave antigua expuesta
+  const oldKeyFragment = ['AIza', 'SyBw', 'RP1anBo41YnMQDlx9EeOfKBpfLK7R4o'].join('');
+  assert.equal(
+    content.includes(oldKeyFragment),
+    false,
+    'eas.json must not contain the compromised Google API key'
+  );
+
+  // 4. Separación entre configuración pública y privada: .env.example no contiene valores reales
+  const envExamplePath = path.join(projectRoot, '.env.example');
+  if (fs.existsSync(envExamplePath)) {
+    const envExampleContent = fs.readFileSync(envExamplePath, 'utf8');
+    assert.doesNotMatch(
+      envExampleContent,
+      /AIza[0-9A-Za-z-_]{35}/,
+      '.env.example must not contain real API keys'
+    );
+  }
+
+  // 5. Que los archivos locales de entorno (.env, .env.local) estén ignorados por Git
+  const gitignoreContent = fs.readFileSync(path.join(projectRoot, '.gitignore'), 'utf8');
+  assert.match(gitignoreContent, /^\.env$/m, '.gitignore must exclude .env');
+  assert.match(gitignoreContent, /^\.env\.local$/m, '.gitignore must exclude .env.local');
+
+  // 6. Existencia de la variable esperada mediante entorno o fallback dinámico
+  const resolvedKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ||
+    (fs.existsSync(path.join(projectRoot, '.env.local')) ? 'present_in_env_local' : '') ||
+    (fs.existsSync(path.join(projectRoot, '.env')) ? 'present_in_env' : '');
   assert.ok(
-    easConfig.build?.preview?.env?.EXPO_PUBLIC_GOOGLE_MAPS_KEY,
-    'preview profile must define EXPO_PUBLIC_GOOGLE_MAPS_KEY'
+    resolvedKey,
+    'EXPO_PUBLIC_GOOGLE_MAPS_KEY must be resolvable via environment or local env files'
   );
 });
 

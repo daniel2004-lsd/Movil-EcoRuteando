@@ -500,59 +500,71 @@ export async function getDirections(
   mode: 'driving' | 'walking' = 'driving',
   alternatives = true
 ): Promise<DirectionsResult | null> {
-  // 1. Try backend first (authenticated users)
+  // 1. Intentar primero con el backend (cumple ADR-8 y proxy seguro)
   const backendResult = await tryBackendDirections(origin, destination, mode);
   if (backendResult) {
     return backendResult;
   }
 
-  // 2. Fallback to Google Maps Directions API (if key is unrestricted)
+  // 2. Fallback primario inmediato: OSRM (público, sin restricciones de SHA-1 móvil)
   try {
-    const response = await axios.get(`${BASE_URL}/directions/json`, {
-      params: {
-        origin: `${origin.latitude},${origin.longitude}`,
-        destination: `${destination.latitude},${destination.longitude}`,
-        mode,
-        alternatives,
-        key: GOOGLE_MAPS_API_KEY,
-        language: 'es',
-      },
-    });
-
-    if (response.data.status === 'OK' && Array.isArray(response.data.routes) && response.data.routes.length) {
-      const mapGoogleRoute = (r: any): DirectionsResult => {
-        const leg = r.legs[0];
-        return {
-          polyline: r.overview_polyline?.points || '',
-          distance: leg.distance,
-          duration: leg.duration,
-          steps: leg.steps.map((step: any) => ({
-            instruction: step.html_instructions.replace(/<[^>]*>/g, ''),
-            distance: step.distance,
-            duration: step.duration,
-            startLocation: step.start_location,
-            endLocation: step.end_location,
-            polyline: step.polyline?.points || '',
-            travelMode: step.travel_mode,
-          })),
-          bounds: r.bounds,
-        };
-      };
-
-      const primary = mapGoogleRoute(response.data.routes[0]);
-      const altRoutes: DirectionsResult[] = response.data.routes
-        .slice(1, 3)
-        .map(mapGoogleRoute)
-        .filter((r: DirectionsResult) => r.polyline);
-
-      return { ...primary, alternatives: altRoutes };
+    const osrmResult = await getOsrmDirections(origin, destination, mode, alternatives);
+    if (osrmResult) {
+      return osrmResult;
     }
-  } catch (error) {
-    console.warn('Google Maps REST directions failed, attempting OSRM routing fallback:', error);
+  } catch (osrmError) {
+    console.warn('OSRM routing fallback failed, attempting secondary fallbacks:', osrmError);
   }
 
-  // 3. Fallback universal y autónomo para contingencias de red: OSRM
-  return await getOsrmDirections(origin, destination, mode, alternatives);
+  // 3. Fallback de contingencia: Google Maps REST (solo si la clave estuviera desrestringida)
+  if (GOOGLE_MAPS_API_KEY) {
+    try {
+      const response = await axios.get(`${BASE_URL}/directions/json`, {
+        params: {
+          origin: `${origin.latitude},${origin.longitude}`,
+          destination: `${destination.latitude},${destination.longitude}`,
+          mode,
+          alternatives,
+          key: GOOGLE_MAPS_API_KEY,
+          language: 'es',
+        },
+        timeout: 8000,
+      });
+
+      if (response.data?.status === 'OK' && Array.isArray(response.data?.routes) && response.data.routes.length) {
+        const mapGoogleRoute = (r: any): DirectionsResult => {
+          const leg = r.legs[0];
+          return {
+            polyline: r.overview_polyline?.points || '',
+            distance: leg.distance,
+            duration: leg.duration,
+            steps: leg.steps.map((step: any) => ({
+              instruction: step.html_instructions.replace(/<[^>]*>/g, ''),
+              distance: step.distance,
+              duration: step.duration,
+              startLocation: step.start_location,
+              endLocation: step.end_location,
+              polyline: step.polyline?.points || '',
+              travelMode: step.travel_mode,
+            })),
+            bounds: r.bounds,
+          };
+        };
+
+        const primary = mapGoogleRoute(response.data.routes[0]);
+        const altRoutes: DirectionsResult[] = response.data.routes
+          .slice(1, 3)
+          .map(mapGoogleRoute)
+          .filter((r: DirectionsResult) => r.polyline);
+
+        return { ...primary, alternatives: altRoutes };
+      }
+    } catch (googleError) {
+      console.warn('Google Maps REST directions fallback failed:', googleError);
+    }
+  }
+
+  return null;
 }
 
 export function decodePolyline(encoded: string): { latitude: number; longitude: number }[] {
@@ -682,6 +694,7 @@ export interface NearbyPlace {
   userRatingCount?: number;
   vicinity?: string;
   openNow?: boolean;
+  photoUrl?: string;
 }
 
 export interface PoiCategory {
@@ -704,6 +717,17 @@ export const POI_CATEGORIES: PoiCategory[] = [
 ];
 
 export function mapBackendPlace(p: any): NearbyPlace {
+  const photo =
+    p.photoUrl ||
+    p.photo_url ||
+    (Array.isArray(p.photos) && p.photos.length > 0
+      ? p.photos[0]?.photo_reference
+        ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${p.photos[0].photo_reference}&key=${GOOGLE_MAPS_API_KEY}`
+        : typeof p.photos[0] === 'string'
+        ? p.photos[0]
+        : p.photos[0]?.url
+      : p.icon || undefined);
+
   return {
     placeId: p.placeId || p.place_id || `${p.lat ?? p.latitude ?? 0}-${p.lng ?? p.longitude ?? 0}-${p.name ?? ''}`,
     name: p.name || '',
@@ -718,6 +742,7 @@ export function mapBackendPlace(p: any): NearbyPlace {
         : undefined,
     vicinity: p.vicinity || p.formatted_address || '',
     openNow: p.openNow ?? p.opening_hours?.open_now,
+    photoUrl: photo,
   };
 }
 

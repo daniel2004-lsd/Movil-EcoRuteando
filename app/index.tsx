@@ -21,6 +21,8 @@
   import { TermsModal } from '../src/shared/components/auth/TermsModal';
 
   import { useLanguage } from '../src/shared/store/LanguageContext';
+import { useAuth } from '../src/shared/store/AuthContext';
+import { ActivityIndicator } from 'react-native';
   import { useThemeMode } from '../src/shared/store/ThemeContext';
 
   const LANGS = [
@@ -32,6 +34,14 @@
 
   export default function LandingScreen() {
     const router = useRouter();
+    const { isAuthenticated, isLoading } = useAuth();
+
+    useEffect(() => {
+      if (!isLoading && isAuthenticated) {
+        router.replace('/(tabs)');
+      }
+    }, [isLoading, isAuthenticated]);
+
     const [menuOpen, setMenuOpen] = useState(false);
     const [showTerms, setShowTerms] = useState(false);
 
@@ -67,6 +77,14 @@
         }),
       ]).start();
     }, [heroOpacity, heroTranslateY]);
+
+    if (isLoading) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#064e3b', justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#34d399" />
+        </View>
+      );
+    }
 
     const scrollToY = (y: number) => {
       if (scrollRef.current) {
