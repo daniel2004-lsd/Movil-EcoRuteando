@@ -8,13 +8,14 @@
 import React, { useState, useEffect, forwardRef } from 'react';
 import Constants from 'expo-constants';
 import { WebView } from 'react-native-webview';
-import { View, StyleSheet, AppState } from 'react-native';
+import { View, StyleSheet, AppState, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import RealMapView, {
   Marker as RealMarker,
   Polyline as RealPolyline,
   UrlTile as RealUrlTile,
   Callout as RealCallout,
+  CalloutSubview as RealCalloutSubview,
   PROVIDER_GOOGLE,
 } from 'react-native-maps';
 
@@ -125,8 +126,10 @@ const Marker: any = isExpoGo ? (_p: any) => null : RealMarker;
 const Polyline: any = isExpoGo ? (_p: any) => null : RealPolyline;
 const UrlTile: any = RealUrlTile;
 const Callout: any = isExpoGo ? (_p: any) => null : RealCallout;
+const CalloutSubview: any =
+  isExpoGo || Platform.OS === 'android' ? (_p: any) => null : RealCalloutSubview;
 
-export { Marker, Polyline, UrlTile, Callout, PROVIDER_GOOGLE };
+export { Marker, Polyline, UrlTile, Callout, CalloutSubview, PROVIDER_GOOGLE };
 export default MapView;
 
 const styles = StyleSheet.create({

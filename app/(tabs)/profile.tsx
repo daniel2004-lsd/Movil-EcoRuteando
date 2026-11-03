@@ -493,12 +493,23 @@ export default function ProfileScreen() {
             <Text style={[s.headerTitle, isDark && { color: '#e2e8f0' }]}>{t('home.profileTitle')}</Text>
           </View>
           <View style={s.headerRight}>
-            <TouchableOpacity style={[s.iconBtn, isDark && s.iconBtnDark]} onPress={toggleTheme} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity
+              style={[s.iconBtn, isDark && s.iconBtnDark]}
+              onPress={toggleTheme}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+              accessibilityHint="Alterna entre el tema visual claro y oscuro"
+            >
               <Ionicons name={isDark ? 'sunny-outline' : 'moon-outline'} size={16} color={isDark ? '#facc15' : '#4b5563'} />
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.logoutBtn, isDark && s.logoutBtnDark]}
               onPress={handleLogout}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.logoutShort')}
+              accessibilityHint="Cierra tu sesión y regresa a la pantalla de ingreso"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Ionicons name="log-out-outline" size={16} color={isDark ? '#e2e8f0' : '#4b5563'} />
               <Text style={[s.logoutText, isDark && { color: '#e2e8f0' }]}>{t('home.logoutShort')}</Text>
@@ -515,7 +526,15 @@ export default function ProfileScreen() {
             style={[s.heroCard, isDark && s.heroCardDark]}
           >
             <View style={s.heroRow}>
-              <TouchableOpacity style={s.avatarWrap} onPress={() => setShowPhotoModal(true)} activeOpacity={0.85}>
+              <TouchableOpacity
+                style={s.avatarWrap}
+                onPress={() => setShowPhotoModal(true)}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Foto de perfil del usuario"
+                accessibilityHint="Toca para ver o actualizar tu foto de perfil"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
                 {avatarUri && !avatarBroken ? (
                   <Image
                     source={{ uri: avatarUri }}
@@ -554,14 +573,21 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            <TouchableOpacity style={s.photoBtn} onPress={handlePickAvatar}>
+            <TouchableOpacity
+              style={s.photoBtn}
+              onPress={handlePickAvatar}
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.changePhoto')}
+              accessibilityHint="Abre la galería para cambiar tu foto de perfil"
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
               <Ionicons name="camera-outline" size={15} color="#047857" />
               <Text style={s.photoBtnText}>{t('profile.changePhoto')}</Text>
             </TouchableOpacity>
           </LinearGradient>
 
           {/* Pestañas segmentadas */}
-          <View style={[s.tabsRow, isDark && s.tabsRowDark]}>
+          <View style={[s.tabsRow, isDark && s.tabsRowDark]} accessibilityRole="tablist">
             {TABS.map(tab => {
               const active = activeTab === tab.key;
               return (
@@ -570,6 +596,10 @@ export default function ProfileScreen() {
                   style={[s.tab, isDark && s.tabDark, active && s.tabActive]}
                   onPress={() => setActiveTab(tab.key)}
                   activeOpacity={0.9}
+                  accessibilityRole="tab"
+                  accessibilityLabel={t(tab.labelKey)}
+                  accessibilityState={{ selected: active }}
+                  accessibilityHint={`Muestra la sección de ${t(tab.labelKey)}`}
                 >
                   <Ionicons name={tab.icon} size={15} color={active ? '#fff' : isDark ? '#94a3b8' : '#4b5563'} />
                   <Text
@@ -604,6 +634,8 @@ export default function ProfileScreen() {
                       placeholder={t('profile.personal.placeholders.fullName')}
                       placeholderTextColor="#9ca3af"
                       style={[s.input, inputBoxDark]}
+                      accessibilityLabel={t('profile.personal.fields.fullName')}
+                      accessibilityRole="text"
                     />
                   </View>
                   <View style={s.fieldCol}>
@@ -614,6 +646,8 @@ export default function ProfileScreen() {
                       placeholder={t('profile.personal.placeholders.documentId')}
                       placeholderTextColor="#9ca3af"
                       style={[s.input, inputBoxDark]}
+                      accessibilityLabel={t('profile.personal.fields.documentId')}
+                      accessibilityRole="text"
                     />
                   </View>
                 </View>
@@ -628,6 +662,8 @@ export default function ProfileScreen() {
                       placeholderTextColor="#9ca3af"
                       keyboardType="phone-pad"
                       style={[s.input, inputBoxDark]}
+                      accessibilityLabel={t('profile.personal.fields.phone')}
+                      accessibilityRole="text"
                     />
                   </View>
                   <View style={s.fieldCol}>
@@ -638,6 +674,8 @@ export default function ProfileScreen() {
                       placeholder={t('profile.personal.placeholders.city')}
                       placeholderTextColor="#9ca3af"
                       style={[s.input, inputBoxDark]}
+                      accessibilityLabel={t('profile.personal.fields.city')}
+                      accessibilityRole="text"
                     />
                   </View>
                 </View>
@@ -651,6 +689,8 @@ export default function ProfileScreen() {
                       placeholder={t('profile.personal.placeholders.birthdate')}
                       placeholderTextColor="#9ca3af"
                       style={[s.input, inputBoxDark]}
+                      accessibilityLabel={t('profile.personal.fields.birthdate')}
+                      accessibilityRole="text"
                     />
                   </View>
                   <View style={s.fieldCol}>
@@ -663,6 +703,9 @@ export default function ProfileScreen() {
                             key={opt.id}
                             style={[s.chip, isDark && s.chipDark, active && s.chipActive]}
                             onPress={() => setGender(opt.id as any)}
+                            accessibilityRole="button"
+                            accessibilityLabel={t(opt.labelKey)}
+                            accessibilityState={{ selected: active }}
                           >
                             <Text style={[s.chipText, isDark && s.chipTextDark, active && s.chipTextActive]}>
                               {t(opt.labelKey)}
@@ -684,6 +727,9 @@ export default function ProfileScreen() {
                           key={opt.id}
                           style={[s.chip, isDark && s.chipDark, active && s.chipActive]}
                           onPress={() => setMainTransport(opt.id as any)}
+                          accessibilityRole="button"
+                          accessibilityLabel={t(opt.labelKey)}
+                          accessibilityState={{ selected: active }}
                         >
                           <Text style={[s.chipText, isDark && s.chipTextDark, active && s.chipTextActive]}>
                             {t(opt.labelKey)}
@@ -703,6 +749,8 @@ export default function ProfileScreen() {
                     placeholderTextColor="#9ca3af"
                     multiline
                     style={[s.textArea, isDark && s.textAreaDark]}
+                    accessibilityLabel={t('profile.personal.fields.bio')}
+                    accessibilityRole="text"
                   />
                 </View>
 
@@ -717,15 +765,28 @@ export default function ProfileScreen() {
                         placeholderTextColor="#9ca3af"
                         secureTextEntry={!showCurrentPassForProfile}
                         style={[s.inputInline, isDark && { color: '#e2e8f0' }]}
+                        accessibilityLabel={t('profile.personal.fields.currentPassword')}
+                        accessibilityRole="text"
                       />
-                      <TouchableOpacity onPress={() => setShowCurrentPassForProfile(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <TouchableOpacity
+                        onPress={() => setShowCurrentPassForProfile(v => !v)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={showCurrentPassForProfile ? 'Ocultar contraseña' : 'Ver contraseña'}
+                      >
                         <Ionicons name={showCurrentPassForProfile ? 'eye-off-outline' : 'eye-outline'} size={18} color={isDark ? '#94a3b8' : '#6b7280'} />
                       </TouchableOpacity>
                     </View>
                   </View>
                 )}
 
-                <TouchableOpacity style={[s.primaryBtn, isDark && s.primaryBtnDark]} onPress={handleSavePersonal}>
+                <TouchableOpacity
+                  style={[s.primaryBtn, isDark && s.primaryBtnDark]}
+                  onPress={handleSavePersonal}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('profile.personal.save')}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
                   <Ionicons name="checkmark-circle-outline" size={18} color={isDark ? '#06281c' : '#fff'} />
                   <Text style={[s.primaryBtnText, isDark && s.primaryBtnTextDark]}>
                     {t('profile.personal.save')}
@@ -750,6 +811,9 @@ export default function ProfileScreen() {
                         key={opt.id}
                         style={[s.chip, isDark && s.chipDark, active && s.chipActive]}
                         onPress={() => setLang(opt.id as any)}
+                        accessibilityRole="button"
+                        accessibilityLabel={t(opt.labelKey)}
+                        accessibilityState={{ selected: active }}
                       >
                         <Text style={[s.chipText, isDark && s.chipTextDark, active && s.chipTextActive]}>
                           {t(opt.labelKey)}
@@ -766,6 +830,9 @@ export default function ProfileScreen() {
                       style={[s.exportBtn, isDark && s.exportBtnDark, exportingFormat !== null && { opacity: 0.6 }]}
                       disabled={exportingFormat !== null}
                       onPress={() => handleExportData('pdf')}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('profile.account.exportOptions.pdf')}
+                      accessibilityState={{ busy: exportingFormat === 'pdf', disabled: exportingFormat !== null }}
                     >
                       {exportingFormat === 'pdf' ? (
                         <ActivityIndicator size="small" color={isDark ? '#34D399' : '#059669'} />
@@ -780,6 +847,9 @@ export default function ProfileScreen() {
                       style={[s.exportBtn, isDark && s.exportBtnDark, exportingFormat !== null && { opacity: 0.6 }]}
                       disabled={exportingFormat !== null}
                       onPress={() => handleExportData('excel')}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('profile.account.exportOptions.excel')}
+                      accessibilityState={{ busy: exportingFormat === 'excel', disabled: exportingFormat !== null }}
                     >
                       {exportingFormat === 'excel' ? (
                         <ActivityIndicator size="small" color={isDark ? '#34D399' : '#059669'} />
@@ -809,7 +879,13 @@ export default function ProfileScreen() {
                     </Text>
                   </View>
                 </View>
-                <TouchableOpacity style={s.dangerBtn} onPress={handleDeleteAccount}>
+                <TouchableOpacity
+                  style={s.dangerBtn}
+                  onPress={handleDeleteAccount}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('profile.account.deleteButton')}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
                   <Ionicons name="trash-outline" size={16} color="#fff" />
                   <Text style={s.dangerBtnText}>{t('profile.account.deleteButton')}</Text>
                 </TouchableOpacity>
@@ -848,8 +924,15 @@ export default function ProfileScreen() {
                         placeholderTextColor="#9ca3af"
                         secureTextEntry={!showCurrentPass}
                         style={[s.inputInline, isDark && { color: '#e2e8f0' }]}
+                        accessibilityLabel={t('profile.security.currentPassword')}
+                        accessibilityRole="text"
                       />
-                      <TouchableOpacity onPress={() => setShowCurrentPass(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <TouchableOpacity
+                        onPress={() => setShowCurrentPass(v => !v)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={showCurrentPass ? 'Ocultar contraseña actual' : 'Ver contraseña actual'}
+                      >
                         <Ionicons name={showCurrentPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={isDark ? '#94a3b8' : '#6b7280'} />
                       </TouchableOpacity>
                     </View>
@@ -865,8 +948,15 @@ export default function ProfileScreen() {
                         placeholderTextColor="#9ca3af"
                         secureTextEntry={!showNewPass}
                         style={[s.inputInline, isDark && { color: '#e2e8f0' }]}
+                        accessibilityLabel={t('profile.security.newPassword')}
+                        accessibilityRole="text"
                       />
-                      <TouchableOpacity onPress={() => setShowNewPass(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <TouchableOpacity
+                        onPress={() => setShowNewPass(v => !v)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={showNewPass ? 'Ocultar nueva contraseña' : 'Ver nueva contraseña'}
+                      >
                         <Ionicons name={showNewPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={isDark ? '#94a3b8' : '#6b7280'} />
                       </TouchableOpacity>
                     </View>
@@ -882,8 +972,15 @@ export default function ProfileScreen() {
                         placeholderTextColor="#9ca3af"
                         secureTextEntry={!showConfirmPass}
                         style={[s.inputInline, isDark && { color: '#e2e8f0' }]}
+                        accessibilityLabel={t('profile.security.confirmPassword')}
+                        accessibilityRole="text"
                       />
-                      <TouchableOpacity onPress={() => setShowConfirmPass(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <TouchableOpacity
+                        onPress={() => setShowConfirmPass(v => !v)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={showConfirmPass ? 'Ocultar confirmación de contraseña' : 'Ver confirmación de contraseña'}
+                      >
                         <Ionicons name={showConfirmPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={isDark ? '#94a3b8' : '#6b7280'} />
                       </TouchableOpacity>
                     </View>
@@ -894,7 +991,13 @@ export default function ProfileScreen() {
                     <Text style={[s.hintText, isDark && { color: '#94a3b8' }]}>{t('profile.security.hint')}</Text>
                   </View>
 
-                  <TouchableOpacity style={[s.primaryBtn, isDark && s.primaryBtnDark]} onPress={handleChangePassword}>
+                  <TouchableOpacity
+                    style={[s.primaryBtn, isDark && s.primaryBtnDark]}
+                    onPress={handleChangePassword}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('profile.security.button')}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
                     <Ionicons name="lock-closed-outline" size={17} color={isDark ? '#06281c' : '#fff'} />
                     <Text style={[s.primaryBtnText, isDark && s.primaryBtnTextDark]}>
                       {t('profile.security.button')}
@@ -968,6 +1071,10 @@ export default function ProfileScreen() {
                       style={[s.faqItem, isDark && s.faqItemDark, isOpen && (isDark ? s.faqItemOpenDark : s.faqItemOpen)]}
                       onPress={() => setExpandedFaq(isOpen ? null : faq.id)}
                       activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={faq.q}
+                      accessibilityState={{ expanded: isOpen }}
+                      accessibilityHint={isOpen ? 'Colapsa la respuesta' : 'Expande para ver la respuesta'}
                     >
                       <View style={s.faqHeader}>
                         <Text style={[s.faqQ, isDark && { color: '#e2e8f0' }, isOpen && { color: '#10b981' }]}>{faq.q}</Text>
@@ -1003,6 +1110,8 @@ export default function ProfileScreen() {
                     placeholder="Ej: Inconveniente calculando ruta en el centro..."
                     placeholderTextColor="#9ca3af"
                     style={[s.input, isDark && s.inputDark]}
+                    accessibilityLabel="Asunto de la solicitud"
+                    accessibilityRole="text"
                   />
                 </View>
 
@@ -1016,6 +1125,9 @@ export default function ProfileScreen() {
                           key={pt.id}
                           style={[s.chip, isDark && s.chipDark, active && s.chipActive]}
                           onPress={() => setSupportProblemType(pt.id)}
+                          accessibilityRole="button"
+                          accessibilityLabel={pt.id === 'routes' ? 'Rutas' : pt.id === 'profile' ? 'Cuenta' : pt.id === 'general' ? 'General' : pt.id === 'suggestion' ? 'Sugerencia' : 'Otro'}
+                          accessibilityState={{ selected: active }}
                         >
                           <Text style={[s.chipText, isDark && s.chipTextDark, active && s.chipTextActive, { fontSize: 11 }]}>
                             {pt.id === 'routes' ? 'Rutas' : pt.id === 'profile' ? 'Cuenta' : pt.id === 'general' ? 'General' : pt.id === 'suggestion' ? 'Sugerencia' : 'Otro'}
@@ -1035,6 +1147,8 @@ export default function ProfileScreen() {
                     placeholderTextColor="#9ca3af"
                     multiline
                     style={[s.textArea, isDark && s.textAreaDark]}
+                    accessibilityLabel="Descripción de la solicitud"
+                    accessibilityRole="text"
                   />
                 </View>
 
@@ -1042,6 +1156,10 @@ export default function ProfileScreen() {
                   style={[s.primaryBtn, isDark && s.primaryBtnDark, submittingTicket && { opacity: 0.5 }]}
                   onPress={handleSendSupport}
                   disabled={submittingTicket}
+                  accessibilityRole="button"
+                  accessibilityLabel={submittingTicket ? 'Enviando solicitud...' : t('profile.support.button')}
+                  accessibilityState={{ busy: submittingTicket, disabled: submittingTicket }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
                   <Ionicons name="send-outline" size={17} color={isDark ? '#06281c' : '#fff'} />
                   <Text style={[s.primaryBtnText, isDark && s.primaryBtnTextDark]}>
@@ -1060,7 +1178,14 @@ export default function ProfileScreen() {
                     subtitle="Seguimiento del estado de tus solicitudes"
                     isDark={isDark}
                   />
-                  <TouchableOpacity onPress={loadMyTickets} disabled={loadingTickets}>
+                  <TouchableOpacity
+                    onPress={loadMyTickets}
+                    disabled={loadingTickets}
+                    accessibilityRole="button"
+                    accessibilityLabel={loadingTickets ? 'Actualizando solicitudes...' : 'Refrescar solicitudes'}
+                    accessibilityState={{ busy: loadingTickets, disabled: loadingTickets }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
                     <Text style={{ fontSize: 12, fontWeight: '700', color: '#10b981' }}>
                       {loadingTickets ? 'Actualizando...' : 'Refrescar'}
                     </Text>
@@ -1096,6 +1221,10 @@ export default function ProfileScreen() {
                         activeOpacity={0.8}
                         onPress={() => setExpandedTicketId(isExpanded ? null : ticketKey)}
                         style={[s.ticketItem, isDark && s.ticketItemDark]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Solicitud: ${ticket.subject}. Estado: ${statusText}`}
+                        accessibilityState={{ expanded: isExpanded }}
+                        accessibilityHint={isExpanded ? 'Colapsar detalles de solicitud' : 'Expandir para ver historial'}
                       >
                         <View style={s.ticketRow}>
                           <Text style={[s.ticketSubject, isDark && { color: '#e2e8f0' }]} numberOfLines={1}>
@@ -1197,6 +1326,8 @@ export default function ProfileScreen() {
             style={StyleSheet.absoluteFill}
             activeOpacity={1}
             onPress={() => setShowPhotoModal(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar modal de foto de perfil"
           />
 
           <View style={[s.photoModalContent, isDark && s.photoModalContentDark]}>
@@ -1208,6 +1339,8 @@ export default function ProfileScreen() {
                 style={[s.photoModalCloseBtn, isDark && s.photoModalCloseBtnDark]}
                 onPress={() => setShowPhotoModal(false)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar modal de foto"
               >
                 <Ionicons name="close" size={20} color={isDark ? '#e2e8f0' : '#4b5563'} />
               </TouchableOpacity>
@@ -1219,6 +1352,7 @@ export default function ProfileScreen() {
                   source={{ uri: avatarUri }}
                   style={s.photoModalImage}
                   resizeMode="cover"
+                  accessibilityLabel="Vista previa de foto de perfil"
                 />
               ) : (
                 <View style={[s.photoModalPlaceholder, isDark && { backgroundColor: '#162329' }]}>
@@ -1241,6 +1375,9 @@ export default function ProfileScreen() {
                   setShowPhotoModal(false);
                   handlePickAvatar();
                 }}
+                accessibilityRole="button"
+                accessibilityLabel={t('profile.changePhoto')}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Ionicons name="camera-outline" size={18} color="#fff" />
                 <Text style={s.photoModalChangeBtnText}>{t('profile.changePhoto')}</Text>
@@ -1249,6 +1386,9 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 style={[s.photoModalCloseActionBtn, isDark && s.photoModalCloseActionBtnDark]}
                 onPress={() => setShowPhotoModal(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar"
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Text style={[s.photoModalCloseActionText, isDark && { color: '#94a3b8' }]}>
                   Cerrar

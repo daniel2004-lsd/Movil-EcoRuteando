@@ -127,41 +127,102 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
     if (!typeObj) return;
 
     setSending(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Dialog.alert(t('planRoute.permissionDeniedTitle'), t('report.gpsMsg'), { tone: 'warning', icon: 'location' });
-        return;
-      }
-      const pos = await Location.getCurrentPositionAsync({});
+    const submitReport = async (photoUrlToSave: string | null) => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Dialog.alert(t('planRoute.permissionDeniedTitle'), t('report.gpsMsg'), { tone: 'warning', icon: 'location' });
+          setSending(false);
+          return;
+        }
+        const pos = await Location.getCurrentPositionAsync({});
 
-      await apiClient.post('/api/obstacle-reports', {
-        reportType: typeObj.label,
-        description: details.trim() || typeObj.label,
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-        addressText: (location.trim() || t('planRoute.myLocation')).slice(0, 300),
-        photoUrl: photoUri,
+        const reportTypeKey = typeObj.key === 'hole' ? 'pothole'
+          : typeObj.key === 'blocked' ? 'obstruction'
+          : typeObj.key === 'flood' ? 'sewer'
+          : typeObj.key;
+
+        await apiClient.post('/api/obstacle-reports', {
+          reportType: reportTypeKey,
+          description: details.trim() || typeObj.label,
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          addressText: (location.trim() || t('planRoute.myLocation')).slice(0, 300),
+          photoUrl: photoUrlToSave,
+        });
+
+        if (Platform.OS === 'android') {
+          ToastAndroid.show(t('report.sentToast'), ToastAndroid.SHORT);
+        } else {
+          Dialog.alert(t('report.sentTitle'), t('report.sentMsg'));
+        }
+        onSubmitted();
+      } catch (e: any) {
+        Dialog.alert(t('report.sendFailedTitle'), e?.message ?? t('planRoute.unexpectedError'), { tone: 'error' });
+      } finally {
+        setSending(false);
+      }
+    };
+
+    setSending(true);
+    if (!photoUri) {
+      await submitReport(null);
+      return;
+    }
+
+    if (photoUri.startsWith('http://') || photoUri.startsWith('https://')) {
+      await submitReport(photoUri);
+      return;
+    }
+
+    // Subida multipart de fotografía local
+    try {
+      const formData = new FormData();
+      const filename = photoUri.split('/').pop() || 'report_photo.jpg';
+      const extMatch = /\.(\w+)$/.exec(filename);
+      const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
+      const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+      formData.append('file', {
+        uri: photoUri,
+        name: filename,
+        type: mimeType,
+      } as any);
+
+      const uploadRes = await apiClient.post('/api/obstacle-reports/photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      if (Platform.OS === 'android') {
-        ToastAndroid.show(t('report.sentToast'), ToastAndroid.SHORT);
-      } else {
-        Dialog.alert(t('report.sentTitle'), t('report.sentMsg'));
+      const serverUrl = uploadRes.data?.url;
+      if (!serverUrl) {
+        throw new Error('Servidor no retornó URL de imagen');
       }
-      onSubmitted();
-    } catch (e: any) {
-      Dialog.alert(t('report.sendFailedTitle'), e?.message ?? t('planRoute.unexpectedError'), { tone: 'error' });
-    } finally {
-      setSending(false);
+      await submitReport(serverUrl);
+    } catch (uploadErr) {
+      console.warn('[ReportFormSheet] Error al subir foto:', uploadErr);
+      Dialog.alert(
+        t('common.errorTitle') || 'Fallo de subida de fotografía',
+        'No fue posible subir la imagen al servidor. ¿Deseas enviar el reporte sin fotografía o cancelar para reintentar?',
+        [
+          { text: 'Cancelar', style: 'cancel', onPress: () => setSending(false) },
+          { text: 'Enviar sin foto', onPress: () => submitReport(null) },
+        ],
+        { tone: 'warning' }
+      );
     }
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>{t('report.formTitle')}</Text>
-        <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Text style={styles.title} accessibilityRole="header">{t('report.formTitle')}</Text>
+        <TouchableOpacity
+          onPress={onClose}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.close') || 'Cerrar'}
+          accessibilityHint="Cierra el formulario de reporte sin guardar"
+        >
           <Ionicons name="close" size={22} color="#5f6368" />
         </TouchableOpacity>
       </View>
@@ -173,7 +234,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
         showsVerticalScrollIndicator={false}
       >
         {/* Tipos de reporte */}
-        <View style={styles.grid}>
+        <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel={t('report.chooseTypeTitle') || 'Tipo de incidente'}>
           {OBSTACLE_TYPES.map(item => {
             const active = selectedType === item.key;
             return (
@@ -182,6 +243,10 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
                 style={[styles.typeCard, active && styles.typeCardActive]}
                 onPress={() => setSelectedType(item.key)}
                 activeOpacity={0.75}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${item.label}${active ? ', seleccionado' : ''}`}
+                accessibilityHint="Selecciona este tipo de obstáculo para el reporte"
               >
                 <Ionicons
                   name={item.icon as any}
@@ -206,17 +271,21 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
             placeholder={t('report.locationTitle')}
             placeholderTextColor="#9aa0a6"
             returnKeyType="done"
+            accessibilityLabel={t('report.locationTitle')}
           />
         </View>
 
         {/* Foto: cámara / galería estilo Google Maps */}
         {photoUri ? (
           <View style={styles.photoRow}>
-            <Image source={{ uri: photoUri }} style={styles.photoThumb} />
+            <Image source={{ uri: photoUri }} style={styles.photoThumb} accessibilityLabel="Vista previa de la foto adjunta" />
             <Text style={[styles.photoText, { flex: 1 }]}>{t('report.photoAttached')}</Text>
             <TouchableOpacity
               onPress={() => setPhotoUri(null)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Eliminar fotografía adjunta"
+              accessibilityHint="Quita la foto seleccionada del reporte"
             >
               <Ionicons name="close-circle" size={20} color="#9aa0a6" />
             </TouchableOpacity>
@@ -224,11 +293,25 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
         ) : (
           <View style={styles.photoRow}>
             <Ionicons name="camera-outline" size={18} color="#16a34a" />
-            <TouchableOpacity style={styles.photoBtn} onPress={handlePickPhoto} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.photoBtn}
+              onPress={handlePickPhoto}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={t('report.cameraBtn')}
+              accessibilityHint="Abre la cámara para tomar una foto del obstáculo"
+            >
               <Text style={styles.photoText}>{t('report.cameraBtn')}</Text>
             </TouchableOpacity>
             <View style={styles.photoDivider} />
-            <TouchableOpacity style={styles.photoBtn} onPress={handlePickGallery} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.photoBtn}
+              onPress={handlePickGallery}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={t('report.galleryBtn')}
+              accessibilityHint="Abre la galería para elegir una foto existente"
+            >
               <Text style={styles.photoText}>{t('report.galleryBtn')}</Text>
             </TouchableOpacity>
           </View>
@@ -243,6 +326,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
           placeholderTextColor="#9aa0a6"
           multiline
           maxLength={500}
+          accessibilityLabel={t('report.detailsPlaceholderOpt')}
         />
       </ScrollView>
 
@@ -251,6 +335,10 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
         onPress={handleSend}
         disabled={sending}
         activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={sending ? t('report.sending') : t('report.send')}
+        accessibilityHint="Envía el reporte comunitario con la ubicación y foto seleccionadas"
+        accessibilityState={{ disabled: sending }}
       >
         <Text style={styles.sendBtnText}>{sending ? t('report.sending') : t('report.send')}</Text>
         <Ionicons name="send" size={18} color="#ffffff" />

@@ -154,6 +154,8 @@ export default {
         routeNotFound: 'Nenhuma rota encontrada',
         routeCalcError: 'Não foi possível calcular a rota',
         routeFromApp: 'Rota calculada pelo aplicativo móvel',
+        startTripBtn: 'Iniciar viagem',
+        mapPoiSelected: 'Ponto selecionado no mapa',
         startTripError: 'Erro ao iniciar a viagem',
         missingOriginDest: 'Faltam origem ou destino para iniciar a viagem',
         tripCompletedTitle: 'Viagem concluída!',

@@ -18,8 +18,8 @@ app/src/main/java/inline/
 # Bundle artifacts
 *.jsbundle
 
-# Keystores y credenciales de firma de producción
+# Keystores y credenciales de firma de producción y debug (H-32)
 *.keystore
-!app/debug.keystore
+debug.keystore
 *.jks
 release-signing.properties

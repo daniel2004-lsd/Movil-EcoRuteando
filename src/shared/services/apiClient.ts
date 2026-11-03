@@ -4,9 +4,7 @@ import { emitSessionExpired } from './authEvents';
 import { tGlobal } from '../../i18n/translations';
 
 export const PRODUCTION_API_URL = 'https://ecoruteandobackend.onrender.com';
-export const API_BASE = !__DEV__
-  ? PRODUCTION_API_URL
-  : (process.env.EXPO_PUBLIC_API_URL || PRODUCTION_API_URL);
+export const API_BASE = process.env.EXPO_PUBLIC_API_URL || PRODUCTION_API_URL;
 
 const apiClient = axios.create({
   baseURL: API_BASE,
@@ -77,9 +75,11 @@ apiClient.interceptors.response.use(
         const refreshToken = await SecureStore.getItemAsync('refreshToken');
         if (!refreshToken) throw new Error('No has iniciado sesión o tu sesión ha expirado.');
 
-        const { data } = await axios.post(`${API_BASE}/api/auth/refresh`, {
-          refreshToken,
-        });
+        const { data } = await axios.post(
+          `${API_BASE}/api/auth/refresh`,
+          { refreshToken },
+          { timeout: 15000 }
+        );
 
         await SecureStore.setItemAsync('accessToken', data.accessToken);
         await SecureStore.setItemAsync('refreshToken', data.refreshToken);
@@ -94,9 +94,14 @@ apiClient.interceptors.response.use(
         const isTemporaryNetworkOrServerError =
           !refreshError.response ||
           refreshError.code === 'ECONNABORTED' ||
-          (refreshError.response.status >= 500 && refreshError.response.status <= 599);
+          refreshError.code === 'ERR_NETWORK' ||
+          refreshError.code === 'ETIMEDOUT' ||
+          refreshError.message?.includes('Network Error') ||
+          refreshError.message?.includes('timeout') ||
+          (refreshError.response?.status >= 500 && refreshError.response?.status <= 599);
 
-        if (!isTemporaryNetworkOrServerError) {
+        // Solo cerrar sesión si el backend rechaza explícitamente el refresh token (401 o 400)
+        if (!isTemporaryNetworkOrServerError && (refreshError.response?.status === 401 || refreshError.response?.status === 400)) {
           await SecureStore.deleteItemAsync('accessToken');
           await SecureStore.deleteItemAsync('refreshToken');
           await SecureStore.deleteItemAsync('profileAvatarUri');

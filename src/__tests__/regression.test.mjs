@@ -15,14 +15,29 @@ test('apiClient: Production URL and customApiUrl purge', () => {
   // Must define validated production backend URL
   assert.match(content, /https:\/\/ecoruteandobackend\.onrender\.com/);
 
-  // Must ensure !__DEV__ uses PRODUCTION_API_URL
-  assert.match(content, /!__DEV__\s*\?\s*PRODUCTION_API_URL/);
+  // Must support EXPO_PUBLIC_API_URL environment configuration with PRODUCTION_API_URL fallback (H-11)
+  assert.match(content, /process\.env\.EXPO_PUBLIC_API_URL\s*\|\|\s*PRODUCTION_API_URL/);
 
   // Must purge any legacy customApiUrl from SecureStore
   assert.match(content, /deleteItemAsync\(['"]customApiUrl['"]\)/);
 
   // Must NOT assign config.baseURL = customUrl
   assert.doesNotMatch(content, /config\.baseURL\s*=\s*customUrl/);
+});
+
+test('ReportFormSheet: Uploads local photos and sends canonical reportType key (H-04 / H-35)', () => {
+  const sheetPath = path.join(projectRoot, 'src/components/maps/ReportFormSheet.tsx');
+  const content = fs.readFileSync(sheetPath, 'utf8');
+
+  // Must upload local photos via multipart to backend /api/obstacle-reports/photo
+  assert.match(content, /\/api\/obstacle-reports\/photo/);
+  assert.match(content, /multipart\/form-data/);
+
+  // Must NOT send translated label as reportType
+  assert.doesNotMatch(content, /reportType:\s*typeObj\.label/);
+
+  // Must map and send technical key
+  assert.match(content, /reportType:\s*reportTypeKey/);
 });
 
 test('login.tsx: Server configuration modal and button are removed', () => {
