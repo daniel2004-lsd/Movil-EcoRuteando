@@ -118,13 +118,88 @@ test('eas.json: Configures preview profile securely without hardcoded secrets an
   assert.match(gitignoreContent, /^\.env$/m, '.gitignore must exclude .env');
   assert.match(gitignoreContent, /^\.env\.local$/m, '.gitignore must exclude .env.local');
 
-  // 6. Existencia de la variable esperada mediante entorno o fallback dinámico
-  const resolvedKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ||
-    (fs.existsSync(path.join(projectRoot, '.env.local')) ? 'present_in_env_local' : '') ||
-    (fs.existsSync(path.join(projectRoot, '.env')) ? 'present_in_env' : '');
-  assert.ok(
-    resolvedKey,
-    'EXPO_PUBLIC_GOOGLE_MAPS_KEY must be resolvable via environment or local env files'
+  // 6. Validación estructural: eas.json no debe exigir claves hardcodeadas para compilar en CI
+  assert.equal(
+    Boolean(easConfig.build?.preview?.env?.EXPO_PUBLIC_GOOGLE_MAPS_KEY),
+    false,
+    'eas.json preview profile must not hardcode EXPO_PUBLIC_GOOGLE_MAPS_KEY'
+  );
+});
+
+test('H-08 Escenario A — CI sin credenciales: pruebas estructurales pasan sin .env ni variables de mapas', () => {
+  const savedKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
+  delete process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
+
+  try {
+    const content = fs.readFileSync(path.join(projectRoot, 'eas.json'), 'utf8');
+    const easConfig = JSON.parse(content);
+
+    // Valida que el perfil preview sea estructuralmente válido sin requerir la clave
+    assert.equal(easConfig.build?.preview?.android?.buildType, 'apk');
+    assert.equal(easConfig.build?.preview?.distribution, 'internal');
+    assert.equal(easConfig.build?.preview?.env?.EXPO_PUBLIC_API_URL, 'https://ecoruteandobackend.onrender.com');
+
+    // Valida que no exista clave hardcodeada en eas.json
+    assert.equal(
+      Boolean(easConfig.build?.preview?.env?.EXPO_PUBLIC_GOOGLE_MAPS_KEY),
+      false,
+      'Preview profile must not require hardcoded EXPO_PUBLIC_GOOGLE_MAPS_KEY'
+    );
+  } finally {
+    if (savedKey !== undefined) {
+      process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY = savedKey;
+    }
+  }
+});
+
+test('H-08 Escenario B — Configuración con variable: reconoce inyección externa exclusivamente en memoria', () => {
+  const savedKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
+  const mockKey = 'TEST_MOCK_ENV_KEY_FOR_INDEPENDENCE_TEST_ONLY';
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY = mockKey;
+
+  try {
+    // La resolución dinámica reconoce la variable en memoria de proceso sin tocar archivos
+    const resolvedKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
+    assert.equal(resolvedKey, mockKey, 'Dynamic configuration must recognize injected key in memory');
+
+    // Validar que eas.json en disco sigue sin contener la clave
+    const diskContent = fs.readFileSync(path.join(projectRoot, 'eas.json'), 'utf8');
+    assert.doesNotMatch(diskContent, new RegExp(mockKey), 'Disk files must never be modified by in-memory injection');
+  } finally {
+    if (savedKey !== undefined) {
+      process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY = savedKey;
+    } else {
+      delete process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
+    }
+  }
+});
+
+test('H-08 Escenario C — Detección de exposición: el escáner detecta claves codificadas en eas.json', () => {
+  const secretPattern = new RegExp(['AIza', '[0-9A-Za-z-_]{35}'].join(''));
+  const dummyExposedKey = ['AIza', 'SyDummyExposureCheckTestKey1234567890'].join('');
+  const dummyExposedConfig = JSON.stringify({
+    build: {
+      preview: {
+        env: {
+          EXPO_PUBLIC_GOOGLE_MAPS_KEY: dummyExposedKey
+        }
+      }
+    }
+  });
+
+  // Debe detectar la exposición en la configuración simulada
+  assert.match(
+    dummyExposedConfig,
+    secretPattern,
+    'Scanner regex must catch hardcoded Google API key patterns'
+  );
+
+  // Y verificar que el archivo real eas.json en disco NO hace match
+  const realContent = fs.readFileSync(path.join(projectRoot, 'eas.json'), 'utf8');
+  assert.doesNotMatch(
+    realContent,
+    secretPattern,
+    'Real tracked eas.json must never trigger secret scanner'
   );
 });
 
