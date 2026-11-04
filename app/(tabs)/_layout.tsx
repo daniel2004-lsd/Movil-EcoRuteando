@@ -6,7 +6,7 @@ import { useAuth } from '../../src/shared/store/AuthContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 
 export default function TabsLayout() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, connectionStatus } = useAuth();
   const { t } = useLanguage();
 
   // Esperar a que la restauración del token termine antes de cualquier redirección
@@ -18,8 +18,9 @@ export default function TabsLayout() {
     );
   }
 
-  // Si no está autenticado, redirigir inmediatamente al login (bloquea deep linking a rutas privadas)
-  if (!isAuthenticated) {
+  // Si no está autenticado o la sesión sigue en estado 'offline-unvalidated' (sin validar),
+  // redirigir inmediatamente al login (bloquea acceso a pantallas protegidas antes de validar la sesión)
+  if (!isAuthenticated || connectionStatus === 'offline-unvalidated') {
     return <Redirect href="/(auth)/login" />;
   }
 
