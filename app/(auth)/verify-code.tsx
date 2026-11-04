@@ -20,7 +20,7 @@ import { LogoCircle } from '../../src/shared/components/landing/LogoCircle';
 import { GradientButton } from '../../src/shared/components/ui/GradientButton';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
-import { useAuth } from '../../src/shared/store/AuthContext';
+import { useAuth, decodeJwtPayload, isTokenExpired } from '../../src/shared/store/AuthContext';
 import apiClient from '../../src/shared/services/apiClient';
 
 export default function VerifyCodeScreen() {
@@ -82,6 +82,7 @@ export default function VerifyCodeScreen() {
   };
 
   const handleVerify = async () => {
+    if (loading) return;
     const joined = code.join('');
     if (joined.length < 6) {
       setError(t('auth.codeIncomplete'));
@@ -91,7 +92,15 @@ export default function VerifyCodeScreen() {
     setLoading(true);
     try {
       if (is2Fa) {
-        if (!tempToken) {
+        const cleanTempToken = typeof tempToken === 'string' ? tempToken.trim() : '';
+        if (!cleanTempToken) {
+          setError('El token temporal de 2FA ha expirado o no es válido. Por favor inicia sesión nuevamente.');
+          return;
+        }
+
+        // Si el tempToken es un JWT con exp vencido en cliente, rechazar preventivamente sin autenticar
+        const decodedTemp = decodeJwtPayload(cleanTempToken);
+        if (decodedTemp && typeof decodedTemp.exp === 'number' && isTokenExpired(cleanTempToken, 0)) {
           setError('El token temporal de 2FA ha expirado o no es válido. Por favor inicia sesión nuevamente.');
           return;
         }
@@ -101,21 +110,24 @@ export default function VerifyCodeScreen() {
           { code: joined, rememberDevice: false },
           {
             headers: {
-              Authorization: `Bearer ${tempToken}`,
+              Authorization: `Bearer ${cleanTempToken}`,
             },
           }
         );
 
         const data = res?.data;
-        const accessToken = data?.token || data?.accessToken;
+        const accessToken = data?.accessToken || data?.token;
         const refreshToken = data?.refreshToken;
 
         if (accessToken && refreshToken) {
+          if (accessToken === cleanTempToken) {
+            throw new Error('El token temporal de 2FA no puede guardarse como token de acceso.');
+          }
           await signIn({
             accessToken,
             refreshToken,
             email: String(email || ''),
-            role: data?.role || 'user',
+            role: data?.role,
             userId: data?.userId,
             firstName: data?.firstName,
           });
@@ -126,7 +138,7 @@ export default function VerifyCodeScreen() {
       } else {
         const res = await apiClient.post('/api/auth/verify-email', { code: joined });
         const data = res?.data;
-        const accessToken = data?.token || data?.accessToken;
+        const accessToken = data?.accessToken || data?.token;
         const refreshToken = data?.refreshToken;
 
         if (accessToken && refreshToken && email) {
@@ -134,7 +146,7 @@ export default function VerifyCodeScreen() {
             accessToken,
             refreshToken,
             email: String(email),
-            role: data?.role || 'user',
+            role: data?.role,
             userId: data?.userId,
             firstName: data?.firstName,
           });
