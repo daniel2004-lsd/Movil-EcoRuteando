@@ -114,47 +114,6 @@ import { ActivityIndicator } from 'react-native';
 
     return (
       <>
-        {/* Header fijo */}
-        <View
-          style={[
-            s.fixedHeader,
-            {
-              backgroundColor: isDark
-                ? 'rgba(6,78,59,0.98)'
-                : 'rgba(6,78,59,0.96)',
-            },
-          ]}
-        >
-          <View style={s.logoRow}>
-            <LogoCircle size={24} />
-            <Text style={s.logoText}>{t('common.appName')}</Text>
-          </View>
-
-          <View style={s.headerRight}>
-            <TouchableOpacity
-              onPress={toggleTheme}
-              style={s.themeBtn}
-            accessibilityLabel={`${t('landing.changeLanguage')} ${lang.toUpperCase()}`}
-            >
-              <Ionicons
-                name={isDark ? 'sunny-outline' : 'moon-outline'}
-                size={18}
-                color="#ecfdf5"
-              />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={s.menuBtn}
-              onPress={() => setMenuOpen(true)}
-              accessibilityLabel={t('landing.openMenu')}
-            >
-              <View style={s.menuLine} />
-              <View style={s.menuLine} />
-              <View style={s.menuLine} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
         {/* Contenido */}
         <ScrollView
           ref={scrollRef}
@@ -176,11 +135,43 @@ import { ActivityIndicator } from 'react-native';
             }
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[s.heroWrapper, { paddingTop: 88 }]}
+            style={s.heroWrapper}
           >
             <View style={s.bubbleOne} />
             <View style={s.bubbleTwo} />
             <View style={s.bubbleThree} />
+
+            {/* Header de Landing (se desplaza naturalmente con el scroll) */}
+            <View style={s.headerRow}>
+              <View style={s.logoRow}>
+                <LogoCircle size={24} />
+                <Text style={s.logoText}>{t('common.appName')}</Text>
+              </View>
+
+              <View style={s.headerRight}>
+                <TouchableOpacity
+                  onPress={toggleTheme}
+                  style={s.themeBtn}
+                  accessibilityLabel={`${t('landing.changeLanguage')} ${lang.toUpperCase()}`}
+                >
+                  <Ionicons
+                    name={isDark ? 'sunny-outline' : 'moon-outline'}
+                    size={18}
+                    color="#ecfdf5"
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={s.menuBtn}
+                  onPress={() => setMenuOpen(true)}
+                  accessibilityLabel={t('landing.openMenu')}
+                >
+                  <View style={s.menuLine} />
+                  <View style={s.menuLine} />
+                  <View style={s.menuLine} />
+                </TouchableOpacity>
+              </View>
+            </View>
 
             <Animated.View
               style={{
@@ -547,19 +538,11 @@ import { ActivityIndicator } from 'react-native';
   }
 
   const s = StyleSheet.create({
-    fixedHeader: {
-      position: 'absolute',
-      top: Platform.OS === 'android' ? (StatusBar.currentHeight ? StatusBar.currentHeight + 4 : 32) : 8,
-      left: 0,
-      right: 0,
-      height: 72,
-      paddingHorizontal: spacing.lg,
-      paddingTop: Platform.OS === 'android' ? 4 : 12,
-      paddingBottom: 8,
+    headerRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      zIndex: 20,
+      marginBottom: spacing.lg,
     },
     logoRow: {
       flexDirection: 'row',
@@ -594,7 +577,7 @@ import { ActivityIndicator } from 'react-native';
     },
 
     heroWrapper: {
-      paddingTop: spacing.xl * 1.2,
+      paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ? StatusBar.currentHeight + 12 : 44) : 16,
       paddingBottom: spacing.lg,
       paddingHorizontal: spacing.lg,
       borderBottomLeftRadius: 24,
