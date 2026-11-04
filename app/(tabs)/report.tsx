@@ -57,7 +57,7 @@ const OBSTACLE_TYPES = [
   },
 ];
 
-  const userEmail = auth.email ?? t('home.guestUser');
+  const userEmail = auth.email ?? '';
 
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [showTypeList, setShowTypeList] = useState(false);
@@ -83,41 +83,95 @@ const OBSTACLE_TYPES = [
     const typeObj = OBSTACLE_TYPES.find(item => item.key === selectedType);
     if (!typeObj) return;
 
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Dialog.alert(
-          t('planRoute.permissionDeniedTitle'),
-          t('report.gpsMsg')
-        , { tone: 'warning', icon: 'location' });
-        return;
+    const submitReport = async (photoUrlToSave: string | null) => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Dialog.alert(
+            t('planRoute.permissionDeniedTitle'),
+            t('report.gpsMsg'),
+            { tone: 'warning', icon: 'location' }
+          );
+          return;
+        }
+
+        const pos = await Location.getCurrentPositionAsync({});
+
+        const reportTypeKey = typeObj.key === 'hole' ? 'pothole'
+          : typeObj.key === 'blocked' ? 'obstruction'
+          : typeObj.key === 'flood' ? 'sewer'
+          : typeObj.key;
+
+        await apiClient.post('/api/obstacle-reports', {
+          reportType: reportTypeKey,
+          description: details.trim() || location.trim(),
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          addressText: location.trim(),
+          photoUrl: photoUrlToSave,
+        });
+
+        Dialog.alert(t('report.sentTitle'), t('report.sentMsgFull'));
+
+        setLocation('');
+        setDetails('');
+        setSelectedType(null);
+        setPhotoUri(null);
+        setShowTypeList(false);
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/(tabs)');
+        }
+      } catch (e: any) {
+        Dialog.alert(t('report.sendFailedTitle'), e?.message ?? t('planRoute.unexpectedError'), { tone: 'error' });
       }
+    };
 
-      const pos = await Location.getCurrentPositionAsync({});
-
-      await apiClient.post('/api/obstacle-reports', {
-        reportType: typeObj.label,
-        description: details.trim() || location.trim(),
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-        addressText: location.trim(),
-      });
-
-      Dialog.alert(t('report.sentTitle'), t('report.sentMsgFull'));
-    } catch (e: any) {
-      Dialog.alert(t('report.sendFailedTitle'), e?.message ?? t('planRoute.unexpectedError'), { tone: 'error' });
+    if (!photoUri) {
+      await submitReport(null);
       return;
     }
 
-    setLocation('');
-    setDetails('');
-    setSelectedType(null);
-    setPhotoUri(null);
-    setShowTypeList(false);
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/(tabs)');
+    if (photoUri.startsWith('http://') || photoUri.startsWith('https://')) {
+      await submitReport(photoUri);
+      return;
+    }
+
+    // Subida multipart de fotografía local
+    try {
+      const formData = new FormData();
+      const filename = photoUri.split('/').pop() || 'report_photo.jpg';
+      const extMatch = /\.(\w+)$/.exec(filename);
+      const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
+      const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+      formData.append('file', {
+        uri: photoUri,
+        name: filename,
+        type: mimeType,
+      } as any);
+
+      const uploadRes = await apiClient.post('/api/obstacle-reports/photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const serverUrl = uploadRes.data?.url;
+      if (!serverUrl) {
+        throw new Error('Servidor no retornó URL de imagen');
+      }
+      await submitReport(serverUrl);
+    } catch (uploadErr) {
+      console.warn('[ReportScreen] Error al subir foto:', uploadErr);
+      Dialog.alert(
+        t('common.errorTitle') || 'Fallo de subida de fotografía',
+        'No fue posible subir la imagen al servidor. ¿Deseas enviar el reporte sin fotografía o cancelar para reintentar?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Enviar sin foto', onPress: () => submitReport(null) },
+        ],
+        { tone: 'warning' }
+      );
     }
   };
 const selectedTypeObj = OBSTACLE_TYPES.find(t => t.key === selectedType);
