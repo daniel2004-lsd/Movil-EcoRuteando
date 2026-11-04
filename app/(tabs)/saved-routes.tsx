@@ -3,7 +3,7 @@
 import { Dialog } from '../../src/shared/components/ui/AppDialog';
 import React, { useCallback, useState } from 'react';
 import { 
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, 
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -797,7 +797,8 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: Platform.OS === 'android' ? 42 : 16,
+    paddingBottom: 12,
     backgroundColor: 'rgba(255,255,255,0.95)',
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
