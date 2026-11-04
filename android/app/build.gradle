@@ -144,8 +144,8 @@ android {
         applicationId 'com.ecoruteando.mobile'
         minSdkVersion 24
         targetSdkVersion 34
-        versionCode 10
-        versionName "1.0.9"
+        versionCode 12
+        versionName "1.1.1"
 
         manifestPlaceholders = [
             MAPS_API_KEY: getGoogleMapsApiKey()

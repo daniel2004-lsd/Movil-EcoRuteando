@@ -6,7 +6,7 @@
       "ecoruteando",
       "com.ecoruteando.mobile"
     ],
-    "version": "1.0.9",
+    "version": "1.1.1",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "splash": {
@@ -24,7 +24,7 @@
     ],
     "android": {
       "package": "com.ecoruteando.mobile",
-      "versionCode": 10,
+      "versionCode": 12,
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#e8f3ec"
