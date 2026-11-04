@@ -7,6 +7,7 @@ import {
   ScrollView,
   Dimensions,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart, BarChart, ProgressChart } from 'react-native-chart-kit';
@@ -299,7 +300,8 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: Platform.OS === 'android' ? 42 : 16,
+    paddingBottom: 12,
     backgroundColor: 'rgba(255,255,255,0.95)',
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
