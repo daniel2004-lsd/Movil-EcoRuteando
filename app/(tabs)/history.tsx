@@ -16,7 +16,6 @@ import { useAuth } from '../../src/shared/store/AuthContext';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
 import apiClient from '../../src/shared/services/apiClient';
-import { AccountRequired } from '../../src/shared/components/ui/AccountRequired';
 import { RouteMiniMap } from '../../src/components/maps/RouteMiniMap';
 import { Dialog } from '../../src/shared/components/ui/AppDialog';
 import { exportHtmlToPdf, exportCsvOrExcel } from '../../src/shared/utils/exportUtils';
@@ -59,8 +58,6 @@ export default function HistoryScreen() {
   const { theme } = useThemeMode();
   const { t, t: tr } = useLanguage();
   const isDark = theme === 'dark';
-
-  const isGuest = !!auth.guest;
 
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -203,16 +200,12 @@ export default function HistoryScreen() {
   // Recarga al enfocar y auto-sincronización periódica en segundo plano
   useFocusEffect(
     useCallback(() => {
-      if (isGuest) {
-        setLoading(false);
-        return;
-      }
       fetchTrips();
       const interval = setInterval(() => {
         fetchTrips(true);
       }, 3500);
       return () => clearInterval(interval);
-    }, [fetchTrips, isGuest])
+    }, [fetchTrips])
   );
 
   const totalCo2 = trips.reduce((sum, t) => sum + (t.co2SavedKg ?? 0), 0);
@@ -412,11 +405,7 @@ export default function HistoryScreen() {
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        {isGuest ? (
-          <AccountRequired action={t('history.title')} />
-        ) : (
-          <>
-            {/* Resumen de Impacto estilo Web */}
+        {/* Resumen de Impacto estilo Web */}
             <View style={s.impactGrid}>
               {/* Tarjeta CO2 */}
               <View style={[s.impactCard, s.impactCardEco, isDark && s.impactCardEcoDark]}>
@@ -720,83 +709,87 @@ export default function HistoryScreen() {
 
                         {/* Grilla de Métricas Enriquecidas 2x2 */}
                         <View style={s.metricsGrid}>
-                          <View style={[s.metricBox, isDark && s.metricBoxDark]}>
-                            <Text style={s.metricIcon}>📏</Text>
-                            <View style={s.metricContent}>
-                              <Text style={[s.metricLabel, isDark && { color: '#94a3b8' }]}>
-                                Distancia
-                              </Text>
-                              <Text style={[s.metricVal, isDark && { color: '#e2e8f0' }]}>
-                                {trip.distanceKm.toFixed(2)} km
-                              </Text>
+                          <View style={s.metricsRow}>
+                            <View style={[s.metricBox, isDark && s.metricBoxDark]}>
+                              <Text style={s.metricIcon}>📏</Text>
+                              <View style={s.metricContent}>
+                                <Text style={[s.metricLabel, isDark && { color: '#94a3b8' }]}>
+                                  Distancia
+                                </Text>
+                                <Text style={[s.metricVal, isDark && { color: '#e2e8f0' }]}>
+                                  {trip.distanceKm.toFixed(2)} km
+                                </Text>
+                              </View>
+                            </View>
+
+                            <View style={[s.metricBox, isDark && s.metricBoxDark]}>
+                              <Text style={s.metricIcon}>⏱️</Text>
+                              <View style={s.metricContent}>
+                                <Text style={[s.metricLabel, isDark && { color: '#94a3b8' }]}>
+                                  Duración
+                                </Text>
+                                <Text style={[s.metricVal, isDark && { color: '#e2e8f0' }]}>
+                                  {trip.durationMin} min
+                                </Text>
+                              </View>
                             </View>
                           </View>
 
-                          <View style={[s.metricBox, isDark && s.metricBoxDark]}>
-                            <Text style={s.metricIcon}>⏱️</Text>
-                            <View style={s.metricContent}>
-                              <Text style={[s.metricLabel, isDark && { color: '#94a3b8' }]}>
-                                Duración
-                              </Text>
-                              <Text style={[s.metricVal, isDark && { color: '#e2e8f0' }]}>
-                                {trip.durationMin} min
-                              </Text>
+                          <View style={s.metricsRow}>
+                            <View
+                              style={[
+                                s.metricBox,
+                                s.metricBoxEco,
+                                isDark && s.metricBoxEcoDark,
+                              ]}
+                            >
+                              <Text style={s.metricIcon}>🌱</Text>
+                              <View style={s.metricContent}>
+                                <Text
+                                  style={[
+                                    s.metricLabel,
+                                    { color: isDark ? '#34d399' : '#059669' },
+                                  ]}
+                                >
+                                  CO₂ Ahorrado
+                                </Text>
+                                <Text
+                                  style={[
+                                    s.metricVal,
+                                    { color: isDark ? '#34d399' : '#059669' },
+                                  ]}
+                                >
+                                  {trip.co2SavedKg.toFixed(2)} kg
+                                </Text>
+                              </View>
                             </View>
-                          </View>
 
-                          <View
-                            style={[
-                              s.metricBox,
-                              s.metricBoxEco,
-                              isDark && s.metricBoxEcoDark,
-                            ]}
-                          >
-                            <Text style={s.metricIcon}>🌱</Text>
-                            <View style={s.metricContent}>
-                              <Text
-                                style={[
-                                  s.metricLabel,
-                                  { color: isDark ? '#34d399' : '#059669' },
-                                ]}
-                              >
-                                CO₂ Ahorrado
-                              </Text>
-                              <Text
-                                style={[
-                                  s.metricVal,
-                                  { color: isDark ? '#34d399' : '#059669' },
-                                ]}
-                              >
-                                {trip.co2SavedKg.toFixed(2)} kg
-                              </Text>
-                            </View>
-                          </View>
-
-                          <View
-                            style={[
-                              s.metricBox,
-                              s.metricBoxCal,
-                              isDark && s.metricBoxCalDark,
-                            ]}
-                          >
-                            <Text style={s.metricIcon}>🔥</Text>
-                            <View style={s.metricContent}>
-                              <Text
-                                style={[
-                                  s.metricLabel,
-                                  { color: isDark ? '#fb923c' : '#ea580c' },
-                                ]}
-                              >
-                                Calorías
-                              </Text>
-                              <Text
-                                style={[
-                                  s.metricVal,
-                                  { color: isDark ? '#fb923c' : '#ea580c' },
-                                ]}
-                              >
-                                {calories != null ? `${calories} kcal` : '--'}
-                              </Text>
+                            <View
+                              style={[
+                                s.metricBox,
+                                s.metricBoxCal,
+                                isDark && s.metricBoxCalDark,
+                              ]}
+                            >
+                              <Text style={s.metricIcon}>🔥</Text>
+                              <View style={s.metricContent}>
+                                <Text
+                                  style={[
+                                    s.metricLabel,
+                                    { color: isDark ? '#fb923c' : '#ea580c' },
+                                  ]}
+                                >
+                                  Calorías
+                                </Text>
+                                <Text
+                                  style={[
+                                    s.metricVal,
+                                    { color: isDark ? '#fb923c' : '#ea580c' },
+                                  ]}
+                                >
+                                  {calories != null ? `${calories} kcal` : '--'}
+                                </Text>
+                              </View>
                             </View>
                           </View>
                         </View>
@@ -835,8 +828,6 @@ export default function HistoryScreen() {
                 })
               )}
             </View>
-          </>
-        )}
       </ScrollView>
     </View>
   );
@@ -1240,13 +1231,15 @@ const s = StyleSheet.create({
   },
 
   metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 12,
   },
+  metricsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   metricBox: {
-    width: '48.5%',
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,

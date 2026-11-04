@@ -21,6 +21,8 @@
   import { TermsModal } from '../src/shared/components/auth/TermsModal';
 
   import { useLanguage } from '../src/shared/store/LanguageContext';
+import { useAuth } from '../src/shared/store/AuthContext';
+import { ActivityIndicator } from 'react-native';
   import { useThemeMode } from '../src/shared/store/ThemeContext';
 
   const LANGS = [
@@ -32,6 +34,14 @@
 
   export default function LandingScreen() {
     const router = useRouter();
+    const { isAuthenticated, isLoading } = useAuth();
+
+    useEffect(() => {
+      if (!isLoading && isAuthenticated) {
+        router.replace('/(tabs)');
+      }
+    }, [isLoading, isAuthenticated]);
+
     const [menuOpen, setMenuOpen] = useState(false);
     const [showTerms, setShowTerms] = useState(false);
 
@@ -67,6 +77,14 @@
         }),
       ]).start();
     }, [heroOpacity, heroTranslateY]);
+
+    if (isLoading) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#064e3b', justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#34d399" />
+        </View>
+      );
+    }
 
     const scrollToY = (y: number) => {
       if (scrollRef.current) {
@@ -178,12 +196,22 @@
 
               <View style={s.heroButtons}>
                 <TouchableOpacity
+                  style={s.heroBtnPrimary}
+                  activeOpacity={0.9}
+                  onPress={() => router.push('/(auth)/login')}
+                >
+                  <Text style={s.heroBtnPrimaryText}>
+                    {t('auth.loginButton') ?? 'Iniciar sesión'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
                   style={s.heroBtnSecondary}
                   activeOpacity={0.9}
-                  onPress={() => router.push('/(auth)/guest')}
+                  onPress={() => router.push('/(auth)/register')}
                 >
                   <Text style={s.heroBtnSecondaryText}>
-                    {t('landing.guestButton')}
+                    {t('auth.registerButton') ?? 'Registrarse'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -295,7 +323,7 @@
               onPress={() => router.push('/(auth)/register')}
             >
               <Text style={s.footerBtnText}>
-                {t('landing.guestButton')}
+                {t('auth.registerButton') ?? 'Registrarse'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -452,17 +480,17 @@
                     style={s.drawerGhost}
                     onPress={() => {
                       setMenuOpen(false);
-                      router.push('/(auth)/guest');
+                      router.push('/(auth)/register');
                     }}
                   >
                     <Ionicons
-                      name="walk-outline"
+                      name="person-add-outline"
                       size={18}
                       color="#15803d"
                       style={{ marginRight: 6 }}
                     />
                     <Text style={s.drawerGhostText}>
-                      {t('landing.guestButton') ?? 'Modo invitado'}
+                      {t('auth.registerButton') ?? 'Crear cuenta'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -636,11 +664,25 @@
     },
     heroButtons: {
       marginTop: spacing.md,
-      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 12,
+    },
+    heroBtnPrimary: {
+      paddingVertical: 11,
+      paddingHorizontal: 24,
+      borderRadius: 18,
+      backgroundColor: '#ffffff',
+    },
+    heroBtnPrimaryText: {
+      fontFamily: 'Times New Roman',
+      fontSize: 14,
+      fontWeight: '700',
+      color: '#059669',
     },
     heroBtnSecondary: {
       paddingVertical: 11,
-      paddingHorizontal: 32,
+      paddingHorizontal: 24,
       borderRadius: 18,
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.4)',

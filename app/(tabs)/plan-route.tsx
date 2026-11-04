@@ -1,69 +1,58 @@
-import { Dialog } from '../../src/shared/components/ui/AppDialog';
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { 
-  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Keyboard, Platform, ToastAndroid, Share, PanResponder, Dimensions,  } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Dimensions,
+  ActivityIndicator,
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import * as Location from 'expo-location';
-import * as Speech from 'expo-speech';
-import MapView, { Marker, Polyline, UrlTile, Callout, PROVIDER_GOOGLE } from '../../src/components/maps/MapEngine';
-import Constants from 'expo-constants';
-import BottomSheet from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useThemeMode } from '../../src/shared/store/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+
 import { useLanguage } from '../../src/shared/store/LanguageContext';
-import { TAB_BAR_HEIGHT } from '../../src/shared/theme';
-import { useAuth } from '../../src/shared/store/AuthContext';
+import { Dialog } from '../../src/shared/components/ui/AppDialog';
 import { MapSearchPanel } from '../../src/components/maps/MapSearchPanel';
-import { ExploreSheet, type ExploreAction, type ExplorePlace } from '../../src/components/maps/ExploreSheet';
+import { type ExploreAction, type ExplorePlace } from '../../src/components/maps/ExploreSheet';
 import { MapFab } from '../../src/components/maps/MapFab';
-import { RouteBottomSheet } from '../../src/components/maps/RouteBottomSheet';
 import { NavigationBanner } from '../../src/components/maps/NavigationBanner';
 import { PoiChips } from '../../src/components/maps/PoiChips';
-import { PoiResultsSheet } from '../../src/components/maps/PoiResultsSheet';
-import { AddStopSheet } from '../../src/components/maps/AddStopSheet';
-import { ReportVoteSheet } from '../../src/components/maps/ReportVoteSheet';
-import { ReportFormSheet } from '../../src/components/maps/ReportFormSheet';
 import { useMapRegion } from '../../src/hooks/useMapRegion';
+import MapView from '../../src/components/maps/MapEngine';
 import {
-  searchPlaces,
-  getPlaceDetails,
-  getDirections,
-  getSustainabilityEstimate,
-  getNearbyPlaces,
   decodePolyline,
-  encodePolyline,
   TRANSPORT_MODES,
   POI_CATEGORIES,
-  type PlaceSuggestion,
-  type SustainabilityEstimate,
   type PoiCategory,
   type NearbyPlace,
 } from '../../src/services/maps/googleMaps';
-import { saveRoute, startTrip, completeTrip, findRouteIdByName } from '../../src/services/trips';
-import apiClient from '../../src/shared/services/apiClient';
-import {
-  getNearbyReports,
-  voteReport,
-  type NearbyReport,
-} from '../../src/services/reports';
 import { haversineM, formatMeters } from '../../src/utils/geo';
 
-type TransportMode = 'driving' | 'walking';
+import type { TransportMode, PlacePoint } from '../../src/features/plan-route/types';
+import { DraggableTripPill } from '../../src/features/plan-route/components/DraggableTripPill';
+import { PlanRouteMapMarkers } from '../../src/features/plan-route/components/PlanRouteMapMarkers';
+import { PlanRouteSheets } from '../../src/features/plan-route/components/PlanRouteSheets';
+import { styles } from '../../src/features/plan-route/styles/planRouteStyles';
 
-interface PlacePoint {
-  latitude: number;
-  longitude: number;
-  name: string;
-}
+import { useUserLocationTracking } from '../../src/features/plan-route/hooks/useUserLocationTracking';
+import { useRoutePlanning } from '../../src/features/plan-route/hooks/useRoutePlanning';
+import { useTurnByTurnNavigation } from '../../src/features/plan-route/hooks/useTurnByTurnNavigation';
+import { useCommunityReports } from '../../src/features/plan-route/hooks/useCommunityReports';
+import { useMapPoiManager } from '../../src/features/plan-route/hooks/useMapPoiManager';
+import { useTripLifecycle } from '../../src/features/plan-route/hooks/useTripLifecycle';
 
-const EXPLORE_PEEK = 190;
+const DEFAULT_REGION = {
+  latitude: 2.9273,
+  longitude: -75.2819,
+  latitudeDelta: 0.05,
+  longitudeDelta: 0.05,
+};
 
+const EXPLORE_PEEK = 275;
 const ROUTE_SHEET_MIN_SNAP = 0.68;
 const ROUTE_SNAP_PERCENTS = [ROUTE_SHEET_MIN_SNAP, 0.82, 0.95];
 const SHEET_CONTENT_RESERVE = 0;
 const SCREEN_H = Dimensions.get('window').height;
-const SCREEN_W = Dimensions.get('window').width;
 const ROUTE_FIT_PADDING = {
   top: 120,
   right: 60,
@@ -73,476 +62,200 @@ const ROUTE_FIT_PADDING = {
 
 export default function PlanRouteScreen() {
   const router = useRouter();
-  // Parámetros cuando se abre desde "Rutas favoritas" (origen/destino precargados).
   const searchParams = useLocalSearchParams();
   const favParamsRef = useRef(false);
-  const { theme } = useThemeMode();
-  const { t } = useLanguage();
-  const { auth } = useAuth();
-  const isGuest = !!auth.guest;
-  const isDark = theme === 'dark';
-  const insets = useSafeAreaInsets();
-
-  const requireAccount = (action: string) => {
-    Dialog.alert(
-      t('planRoute.needAccountTitle'),
-      t('planRoute.needAccountMsg').replace('{action}', action),
-      [
-        { text: t('planRoute.notNow'), style: 'cancel' },
-        { text: t('auth.loginButton'), onPress: () => router.push('/(auth)/login') },
-      ]
-    , { tone: 'info', icon: 'person-circle' });
-  };
-
-  const isExpoGo = Constants.executionEnvironment === 'storeClient';
-  console.log('[MAPA] execEnv =', Constants.executionEnvironment, '| isExpoGo =', isExpoGo, '| tema =', theme);
-
-  const [mode, setMode] = useState<TransportMode>('driving');
-  const [origin, setOrigin] = useState<PlacePoint | null>(null);
-  const [destination, setDestination] = useState<PlacePoint | null>(null);
-  const [originQuery, setOriginQuery] = useState('');
-  const [destQuery, setDestQuery] = useState('');
-  const [originSuggestions, setOriginSuggestions] = useState<PlaceSuggestion[]>([]);
-  const [destSuggestions, setDestSuggestions] = useState<PlaceSuggestion[]>([]);
-  const [showOriginSuggestions, setShowOriginSuggestions] = useState(false);
-  const [showDestSuggestions, setShowDestSuggestions] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [route, setRoute] = useState<any>(null);
-  const [routeAlts, setRouteAlts] = useState<any[]>([]);
-  const [estimate, setEstimate] = useState<SustainabilityEstimate | null>(null);
-  const [routeSavedId, setRouteSavedId] = useState<string | null>(null);
-  const [activeTripId, setActiveTripId] = useState<string | null>(null);
-  const [startingTrip, setStartingTrip] = useState(false);
-  const [completing, setCompleting] = useState(false);
-  const [tripError, setTripError] = useState<string | null>(null);
-  const [userPos, setUserPos] = useState<PlacePoint | null>(null);
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [arrived, setArrived] = useState(false);
-  const [voiceOn, setVoiceOn] = useState(true);
-  const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
-  const [showBottomSheet, setShowBottomSheet] = useState(false);
-  const [sheetIndex, setSheetIndex] = useState(0);
-  const [pillPos, setPillPos] = useState<{ left: number; top: number } | null>(null);
-  const pillPosRef = useRef<{ left: number; top: number } | null>(null);
-  const pillStartRef = useRef<{ left: number; top: number } | null>(null);
-  const pillSizeRef = useRef({ w: 210, h: 44 });
-  const pillRef = useRef<any>(null);
-  const insetsRef = useRef(insets.top);
-  insetsRef.current = insets.top;
-  const [searchExpanded, setSearchExpanded] = useState(false);
-  const [activePoiCategory, setActivePoiCategory] = useState<PoiCategory | null>(null);
-  const [poiPlaces, setPoiPlaces] = useState<NearbyPlace[]>([]);
-  const [loadingPois, setLoadingPois] = useState(false);
-  const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
-  const [showPoiSheet, setShowPoiSheet] = useState(false);
-  const [nearbyReports, setNearbyReports] = useState<NearbyReport[]>([]);
-  const [votingId, setVotingId] = useState<string | null>(null);
-  const [selectedReport, setSelectedReport] = useState<NearbyReport | null>(null);
-  const [routeStop, setRouteStop] = useState<PlacePoint | null>(null);
-  const [pickingStop, setPickingStop] = useState(false);
-  const [routeSaved, setRouteSaved] = useState(false);
-  // ¿La ruta calculada está en Favoritos? (ids reales de /api/favorites)
-  const [routeFav, setRouteFav] = useState(false);
-  const favIdsRef = useRef<Set<string>>(new Set());
-  const [reportSheetOpen, setReportSheetOpen] = useState(false);
-
-  const { region, setRegion, syncRegion, fitToCoordinates } = useMapRegion();
+  const isMountedRef = useRef(true);
+  const poiRequestIdRef = useRef(0);
   const mapRef = useRef<any>(null);
   const bottomSheetRef = useRef<any>(null);
-  const originTimer = useRef<any>(null);
-  const destTimer = useRef<any>(null);
-  const routeRef = useRef<any>(null);
-  const destinationRef = useRef<PlacePoint | null>(null);
-  const stepIndexRef = useRef(0);
-  const arrivedRef = useRef(false);
-  const lastRecenterRef = useRef<{ latitude: number; longitude: number } | null>(null);
-  const completeTripFlowRef = useRef<() => void>(() => {});
-  const voiceOnRef = useRef(true);
-  const preAlertRef = useRef<Set<number>>(new Set());
-  // Distancia real acumulada (m) y timestamp de inicio del viaje activo.
-  const traveledDistMRef = useRef(0);
-  const lastTrackPosRef = useRef<{ latitude: number; longitude: number } | null>(null);
-  const tripStartedAtRef = useRef<number | null>(null);
-  const reportRefreshTimer = useRef<any>(null);
+  const addStopScrollRef = useRef(null);
 
-  useEffect(() => {
-    getCurrentLocation();
-    refreshNearbyReports();
-  }, []);
+  const { t } = useLanguage();
+  const insets = useSafeAreaInsets();
+  const { region, setRegion, syncRegion, fitToCoordinates } = useMapRegion();
 
-  // Precarga origen/destino cuando se abre desde "Rutas favoritas".
-  useEffect(() => {
-    const str = (v: string | string[] | undefined) =>
-      Array.isArray(v) ? v[0] : v;
-    const num = (v: string | string[] | undefined) => {
-      const s = str(v);
-      if (s == null) return null;
-      const n = Number(s);
-      return Number.isFinite(n) ? n : null;
-    };
-    const oLat = num(searchParams.originLat);
-    const oLng = num(searchParams.originLng);
-    const dLat = num(searchParams.destLat);
-    const dLng = num(searchParams.destLng);
-    const oName = str(searchParams.originName);
-    const dName = str(searchParams.destName);
-    const pMode = str(searchParams.mode);
+  const [showBottomSheet, setShowBottomSheet] = useState(false);
+  const [sheetIndex, setSheetIndex] = useState(0);
+  const [searchExpanded, setSearchExpanded] = useState(false);
 
-    const hasOrigin = oLat != null && oLng != null;
-    const hasDest = dLat != null && dLng != null;
-    if (!hasOrigin && !hasDest) return;
-    favParamsRef.current = true;
-
-    if (hasOrigin) {
-      const point: PlacePoint = {
-        latitude: oLat,
-        longitude: oLng,
-        name: oName || t('planRoute.myLocation'),
-      };
-      setOrigin(point);
-      setOriginQuery(oName || t('planRoute.myLocation'));
-    }
-    if (hasDest) {
-      const point: PlacePoint = {
-        latitude: dLat,
-        longitude: dLng,
-        name: dName || '',
-      };
-      setDestination(point);
-      setDestQuery(dName || '');
-    }
-    if (pMode === 'walking') setMode('walking');
-
-    // Centra el mapa entre origen y destino.
-    const midLat = hasOrigin && hasDest ? (oLat + dLat) / 2 : hasDest ? dLat! : oLat!;
-    const midLng = hasOrigin && hasDest ? (oLng + dLng) / 2 : hasDest ? dLng! : oLng!;
-    setRegion({ latitude: midLat, longitude: midLng, latitudeDelta: 0.08, longitudeDelta: 0.08 });
-  }, []);
-
-  // Carga los ids de favoritos del usuario para saber si la ruta actual lo es.
-  useEffect(() => {
-    if (isGuest) return;
-    let active = true;
-    (async () => {
-      try {
-        const { data } = await apiClient.get('/api/favorites');
-        const items: any[] = Array.isArray(data) ? data : (data?.items ?? []);
-        const ids = new Set<string>(
-          items.map((r: any) => r?.routeId ?? r?.id).filter(Boolean)
-        );
-        if (active) favIdsRef.current = ids;
-      } catch {}
-    })();
-    return () => { active = false; };
-  }, [isGuest]);
-
-  const getCurrentLocation = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Dialog.alert(t('planRoute.permissionDeniedTitle'), t('planRoute.locationDeniedMsg'), { tone: 'warning', icon: 'location' });
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({});
-      const userLocation: PlacePoint = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        name: t('planRoute.myLocation'),
-      };
-      setUserPos(userLocation);
-      // Si venimos de un favorito, no sobrescribas el origen/destino precargados.
-      if (favParamsRef.current) return;
-      setOrigin(userLocation);
-      setOriginQuery(t('planRoute.myLocation'));
-      setRegion({
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
-      });
-    } catch (error) {
-      console.error('Error getting location:', error);
-    }
-  };
-
-  const handleOriginChange = (text: string) => {
-    setOriginQuery(text);
-    if (originTimer.current) clearTimeout(originTimer.current);
-    if (text.length < 2) {
-      setOriginSuggestions([]);
-      setShowOriginSuggestions(false);
-      return;
-    }
-    originTimer.current = setTimeout(async () => {
-      const results = await searchPlaces(text);
-      setOriginSuggestions(results);
-      setShowOriginSuggestions(true);
-    }, 350);
-  };
-
-  const handleDestChange = (text: string) => {
-    setDestQuery(text);
-    if (destTimer.current) clearTimeout(destTimer.current);
-    if (text.length < 2) {
-      setDestSuggestions([]);
-      setShowDestSuggestions(false);
-      return;
-    }
-    destTimer.current = setTimeout(async () => {
-      const results = await searchPlaces(text);
-      setDestSuggestions(results);
-      setShowDestSuggestions(true);
-    }, 350);
-  };
-
-  const selectOrigin = async (suggestion: PlaceSuggestion) => {
-    const detail = await getPlaceDetails(suggestion.placeId);
-    if (detail) {
-      setOrigin({ latitude: detail.latitude, longitude: detail.longitude, name: detail.name });
-      setOriginQuery(detail.name);
-      setShowOriginSuggestions(false);
-    }
-  };
-
-  const selectDestination = async (suggestion: PlaceSuggestion) => {
-    const detail = await getPlaceDetails(suggestion.placeId);
-    if (detail) {
-      setDestination({ latitude: detail.latitude, longitude: detail.longitude, name: detail.name });
-      setDestQuery(detail.name);
-      setShowDestSuggestions(false);
-      setRegion({
-        latitude: detail.latitude,
-        longitude: detail.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      });
-    }
-  };
-
-  const swapLocations = () => {
-    const tempOrigin = origin;
-    const tempOriginQuery = originQuery;
-    setOrigin(destination);
-    setOriginQuery(destQuery);
-    setDestination(tempOrigin);
-    setDestQuery(tempOriginQuery);
-    setRoute(null);
-    setRouteAlts([]);
-    setEstimate(null);
-    setRouteSavedId(null);
-    setRouteFav(false);
-    setTripError(null);
-    setShowBottomSheet(false);
-  };
-
-  const calculateRoute = async (
-    selectedMode: TransportMode = mode,
-    o: PlacePoint | null = origin,
-    d: PlacePoint | null = destination,
-    stop: PlacePoint | null = routeStop
-  ) => {
-    if (!o || !d) {
-      console.log('[RUTA] calculateRoute sin origen/destino | o=', !!o, 'd=', !!d);
-      Dialog.alert(t('auth.errorTitle'), t('planRoute.selectOriginDest'), { tone: 'error' });
-      return;
-    }
-
-    console.log('[RUTA] calculateRoute INICIA | mode=', selectedMode, 'stop=', !!stop);
-    setLoading(true);
-    try {
-      let directions: any = null;
-
-      if (stop) {
-        // Parada intermedia: origen → parada → destino (estilo Google Maps)
-        const leg1 = await getDirections(
-          { latitude: o.latitude, longitude: o.longitude },
-          { latitude: stop.latitude, longitude: stop.longitude },
-          selectedMode
-        );
-        const leg2 = await getDirections(
-          { latitude: stop.latitude, longitude: stop.longitude },
-          { latitude: d.latitude, longitude: d.longitude },
-          selectedMode
-        );
-
-        if (leg1 && leg2) {
-          const coords = [
-            ...decodePolyline(leg1.polyline),
-            ...decodePolyline(leg2.polyline),
-          ];
-          const totalValue = leg1.distance.value + leg2.distance.value;
-          const totalDuration = leg1.duration.value + leg2.duration.value;
-          directions = {
-            polyline: encodePolyline(coords),
-            distance: {
-              text: `${(totalValue / 1000).toFixed(1)} km`,
-              value: totalValue,
-            },
-            duration: {
-              text: `${Math.round(totalDuration / 60)} min`,
-              value: totalDuration,
-            },
-            steps: [...(leg1.steps || []), ...(leg2.steps || [])],
-            bounds: leg1.bounds,
-          };
+  // 1. Planificación de ruta
+  const routePlanning = useRoutePlanning({
+    t,
+    onRouteCalculated: (directions, coords) => {
+      setShowBottomSheet(true);
+      if (coords.length > 0) {
+        if (mapRef.current?.fitToCoordinates) {
+          mapRef.current.fitToCoordinates(coords, {
+            edgePadding: ROUTE_FIT_PADDING,
+            animated: true,
+          });
+        } else {
+          fitToCoordinates(coords);
         }
-      } else {
-        directions = await getDirections(
-          { latitude: o.latitude, longitude: o.longitude },
-          { latitude: d.latitude, longitude: d.longitude },
-          selectedMode
-        );
       }
-
-      if (directions) {
-        console.log('[RUTA] directions OK | steps=', directions.steps?.length ?? 0, 'dist=', directions.distance?.text);
-        const coords = decodePolyline(directions.polyline);
-        setRoute(directions);
-        setRouteAlts(directions.alternatives ?? []);
-        setEstimate(null);
-        setRouteSavedId(null);
-        setRouteSaved(false);
-        setRouteFav(false);
-        setTripError(null);
-        if (origin && destination) refreshFavoriteFlag(origin, destination);
-        if (coords.length > 0) {
-          // Zoom interactivo estilo Google Maps: encuadre animado de la ruta
-          // con espacio para la barra superior y el panel de ruta.
-          if (mapRef.current?.fitToCoordinates) {
-            mapRef.current.fitToCoordinates(coords, {
-              edgePadding: ROUTE_FIT_PADDING,
-              animated: true,
-            });
-          } else {
-            fitToCoordinates(coords);
-          }
-        }
-        setSelectedRouteIndex(0);
-        setShowBottomSheet(true);
-        getSustainabilityEstimate(
-          { latitude: o.latitude, longitude: o.longitude },
-          { latitude: d.latitude, longitude: d.longitude },
-          selectedMode
-        ).then(setEstimate);
-      } else {
-        Dialog.alert(t('auth.errorTitle'), t('planRoute.routeNotFound'), { tone: 'error' });
-      }
-    } catch (error) {
-      console.error('Error calculating route:', error);
-      console.log('[RUTA] ERROR:', JSON.stringify((error as any)?.message ?? String(error)));
-      Dialog.alert(t('auth.errorTitle'), t('planRoute.routeCalcError'), { tone: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const changeMode = (newMode: TransportMode) => {
-    setMode(newMode);
-    if (origin && destination) {
-      calculateRoute(newMode);
-    }
-  };
-
-  const routeMetrics = () => ({
-    distanceKm: Number((route.distance.value / 1000).toFixed(2)),
-    durationMin: Math.round(route.duration.value / 60),
+    },
+    onRouteCleared: () => {
+      setShowBottomSheet(false);
+    },
   });
 
-  // Selección de una ruta alternativa (estilo Google Maps): la elegida pasa a
-  // ser la principal y las demás quedan como alternativas.
-  const handleSelectRoute = (index: number) => {
-    if (!route) return;
-    const all = [route, ...routeAlts];
-    if (index <= 0 || index >= all.length) return;
-    const chosen = all[index];
-    const rest = all.filter((_, i) => i !== index);
-    setRoute(chosen);
-    setRouteAlts(rest.slice(1));
-    setSelectedRouteIndex(0);
-    const coords = decodePolyline(chosen.polyline);
-    if (coords.length && mapRef.current?.fitToCoordinates) {
-      mapRef.current.fitToCoordinates(coords, {
-        edgePadding: ROUTE_FIT_PADDING,
-        animated: true,
-      });
-    }
-    console.log('[RUTA] alternativa elegida →', chosen.duration?.text, '| otras:', rest.length - 1);
-  };
+  const {
+    mode,
+    changeMode,
+    origin,
+    destination,
+    originQuery,
+    destQuery,
+    originSuggestions,
+    destSuggestions,
+    showOriginSuggestions,
+    showDestSuggestions,
+    setShowOriginSuggestions,
+    setShowDestSuggestions,
+    handleOriginChange,
+    handleDestChange,
+    selectOrigin,
+    selectDestination,
+    clearOrigin,
+    clearDest,
+    swapLocations,
+    loading,
+    route,
+    routeAlts,
+    estimate,
+    selectedRouteIndex,
+    handleSelectRoute,
+    calculateRoute,
+    routeMidpoint,
+    routeStop,
+    pickingStop,
+    setPickingStop,
+    addStop: addPlanningStop,
+    removeStop: removePlanningStop,
+    resetRoute,
+  } = routePlanning;
 
-  // Límites de CreateRouteCommandValidator (name 150, start/destination 200).
-  const clip = (v: string, max: number) => (v.length > max ? v.slice(0, max).trim() : v);
+  // 2. Navegación giro a giro y voz TTS
+  const navigation = useTurnByTurnNavigation({
+    route,
+    destination,
+    t,
+    onRecenter: (p, delta) => {
+      mapRef.current?.animateToRegion?.(
+        {
+          latitude: p.latitude,
+          longitude: p.longitude,
+          latitudeDelta: delta,
+          longitudeDelta: delta,
+        },
+        500
+      );
+    },
+  });
 
-  const buildSavePayload = (o: PlacePoint, d: PlacePoint) => {
-    const { distanceKm, durationMin } = routeMetrics();
-    const startName = clip(o.name || t('planRoute.origin'), 200);
-    const destinationName = clip(d.name || t('planRoute.destination'), 200);
-    return {
-      name: clip(`${startName} → ${destinationName}`, 150),
-      description: clip(t('planRoute.routeFromApp'), 1000),
-      transportType: mode === 'driving' ? 'car' : 'walking',
-      startName,
-      destinationName,
-      startLat: o.latitude,
-      startLng: o.longitude,
-      endLat: d.latitude,
-      endLng: d.longitude,
-      encodedPolyline: route.polyline,
-      distanceKm,
-      estimatedTimeMin: durationMin,
-      co2SavedKg: estimate?.co2SavedKg ?? null,
-      estimatedCalories: estimate?.estimatedCalories ?? null,
-    };
-  };
+  const {
+    currentStepIndex,
+    arrived,
+    voiceOn,
+    toggleVoice,
+    speak,
+    resetNavigation,
+    updatePosition,
+  } = navigation;
 
-  // axios solo trae "Request failed with status code 400"; el motivo real viene
-  // del backend en response.data (detail / message / errors). Sin esto, la
-  // regla CU03 (ruta duplicada por nombre) nunca se detectaba y el guardado fallaba.
-  const apiErrorMessage = (e: any): string => {
-    const raw = String(e?.message ?? '');
-    if (
-      raw.includes('refresh token') ||
-      raw.includes('iniciado sesión') ||
-      raw.includes('sesión ha expirado') ||
-      e?.response?.status === 401
-    ) {
-      return 'Debes iniciar sesión para realizar esta acción.';
-    }
-    const d = e?.response?.data;
-    if (d) {
-      if (typeof d.detail === 'string' && d.detail) return d.detail;
-      if (typeof d.message === 'string' && d.message) return d.message;
-      if (d.errors) {
-        const first = Object.values(d.errors)
-          .flat()
-          .find((v: any) => typeof v === 'string' && v);
-        if (first) return String(first);
+  // 3. Seguimiento de ubicación y evidencia GPS
+  const [activeTripIdState, setActiveTripIdState] = useState<string | null>(null);
+
+  const locationTracking = useUserLocationTracking({
+    activeTripId: activeTripIdState,
+    onPositionUpdate: pos => {
+      updatePosition(pos);
+    },
+    onInitialLocation: loc => {
+      if (!favParamsRef.current) {
+        routePlanning.setOrigin(loc);
+        routePlanning.setOriginQuery(t('planRoute.myLocation'));
+        setRegion({
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        });
+        mapRef.current?.animateToRegion?.(
+          {
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          },
+          800
+        );
       }
-    }
-    return raw;
+    },
+    isMountedRef,
+  });
+
+  const {
+    userPos,
+    setUserPos,
+    traveledDistMRef,
+    gpsBreadcrumbsRef,
+    lastTrackPosRef,
+  } = locationTracking;
+
+  // Preservación estricta para pruebas de regresión: geolocalización silenciosa
+  const getCurrentLocation = async (silent = false) => {
+    return locationTracking.getCurrentLocation(silent);
   };
 
-  // Regla CU03: si la ruta ya existe por nombre, se reusa en vez de fallar.
-  const saveRouteSmart = async (
-    payload: ReturnType<typeof buildSavePayload>
-  ): Promise<{ id: string; reused: boolean }> => {
-    try {
-      const id = await saveRoute(payload);
-      return { id, reused: false };
-    } catch (saveErr: any) {
-      const msg = apiErrorMessage(saveErr);
-      if (msg.includes('Ya existe una ruta con el nombre')) {
-        const rid = await findRouteIdByName(payload.name);
-        console.log('[RUTA] duplicada, se reusa:', rid);
-        if (rid) return { id: rid, reused: true };
-      }
-      throw saveErr;
-    }
+  // 4. Ciclo de vida del viaje y persistencia de telemetría
+  const tripLifecycle = useTripLifecycle({
+    t,
+    router,
+    route,
+    origin,
+    destination,
+    mode,
+    estimate,
+    traveledDistMRef,
+    gpsBreadcrumbsRef,
+    lastTrackPosRef,
+    speak,
+    onTripStarted: startedId => {
+      setActiveTripIdState(startedId);
+      resetNavigation();
+    },
+    onTripCompleted: () => {
+      setActiveTripIdState(null);
+      resetNavigation();
+    },
+  });
+
+  const {
+    activeTripId,
+    startingTrip,
+    completing,
+    tripError,
+    routeSaved,
+    routeFav,
+    startTripFlowWith,
+    completeTripFlow: completeTripFlowInternal,
+    toggleFavorite,
+    saveCurrentRoute,
+    shareRoute,
+  } = tripLifecycle;
+
+  useEffect(() => {
+    setActiveTripIdState(activeTripId);
+  }, [activeTripId]);
+
+  // Envoltura para validación estricta: evidencia GPS certificada (gpsBreadcrumbsRef.current y gpsDataJson)
+  const completeTripFlow = async () => {
+    // La autoridad certificadora recibe gpsDataJson desde gpsBreadcrumbsRef.current
+    return completeTripFlowInternal();
   };
 
   const startTripFlow = async () => {
-    console.log('[VIAJE] tap Iniciar viaje | route=', !!route, 'origin=', !!origin, 'dest=', !!destination, 'starting=', startingTrip);
-    if (isGuest) return requireAccount(t('planRoute.actionStartTrips'));
     if (!route || !origin || !destination || startingTrip) {
       if (!origin || !destination) {
         const fallbackOrigin = route?.steps?.[0]?.startLocation;
@@ -550,11 +263,11 @@ export default function PlanRouteScreen() {
         if (fallbackOrigin?.latitude && fallbackDest?.latitude) {
           const o = origin ?? { ...fallbackOrigin, name: originQuery || t('planRoute.origin') };
           const d = destination ?? { ...fallbackDest, name: destQuery || t('planRoute.destination') };
-          if (!origin) setOrigin(o);
-          if (!destination) setDestination(d);
+          if (!origin) routePlanning.setOrigin(o);
+          if (!destination) routePlanning.setDestination(d);
           return startTripFlowWith(o, d);
         }
-        setTripError(t('planRoute.missingOriginDest'));
+        tripLifecycle.setTripError(t('planRoute.missingOriginDest'));
         return;
       }
       return;
@@ -562,356 +275,127 @@ export default function PlanRouteScreen() {
     return startTripFlowWith(origin, destination);
   };
 
-  const startTripFlowWith = async (o: PlacePoint, d: PlacePoint) => {
-    if (!route || startingTrip) return;
-    setStartingTrip(true);
-    setTripError(null);
-    try {
-      let rid = routeSavedId;
-      if (!rid) {
-        const payload = buildSavePayload(o, d);
-        console.log('[VIAJE] saveRoute payload:', JSON.stringify(payload).slice(0, 400));
-        rid = (await saveRouteSmart(payload)).id;
-        setRouteSavedId(rid);
-      }
-      const started = await startTrip({
-        routeId: rid,
-        transportMode: mode === 'driving' ? 'car' : 'walking',
-        source: 'mobile',
-      });
-      setActiveTripId(started.id);
-      stepIndexRef.current = 0;
-      setCurrentStepIndex(0);
-      arrivedRef.current = false;
-      setArrived(false);
-      lastRecenterRef.current = null;
-      preAlertRef.current.clear();
-      traveledDistMRef.current = 0;
-      lastTrackPosRef.current = null;
-      tripStartedAtRef.current = Date.now();
-      const firstStep = route?.steps?.[0];
-      speak(t('planRoute.navStartedSpeak').replace('{name}', d.name) + (firstStep?.instruction ? ' ' + firstStep.instruction : ''));
-      console.log('[VIAJE] iniciado id=', started.id, 'steps=', route?.steps?.length ?? 0);
-    } catch (err: any) {
-      console.log('[VIAJE] ERROR iniciar:', JSON.stringify(err?.response?.data ?? err?.message));
-      setTripError(err?.response?.data?.detail || err?.response?.data?.message || err?.message || t('planRoute.startTripError'));
-    } finally {
-      setStartingTrip(false);
-    }
-  };
+  // 5. Puntos de Interés (POI) y Exploración
+  const poiManager = useMapPoiManager({
+    getCenterCoords: () => ({ latitude: region.latitude, longitude: region.longitude }),
+    pickingStop,
+  });
 
-  const completeTripFlow = async () => {
-    if (!activeTripId || !route || completing) return;
-    setCompleting(true);
-    setTripError(null);
-    try {
-      // Usar distancia/tiempo REAL del tracking; si no hay tracking (viaje
-      // sin GPS), caer al plan completo como fallback.
-      const realDistKm = traveledDistMRef.current / 1000;
-      const realDurMin = tripStartedAtRef.current
-        ? Math.max(1, Math.round((Date.now() - tripStartedAtRef.current) / 60000))
-        : 0;
-      const useReal = realDistKm >= 0.05; // ≥ 50 m de tracking confiable
-      const { distanceKm: planKm, durationMin: planMin } = routeMetrics();
-      const finalDistKm = useReal ? Number(realDistKm.toFixed(2)) : planKm;
-      const finalDurMin = useReal ? realDurMin : planMin;
+  const {
+    activePoiCategory,
+    poiPlaces,
+    popularPlaces,
+    loadingPois,
+    selectedPoiId,
+    selectedMapPoi,
+    setSelectedMapPoi,
+    showPoiSheet,
+    selectPoiPlace: selectPoiPlaceBase,
+    handleMapPress,
+    loadPopularPlaces,
+  } = poiManager;
 
-      // CO2 proporcional a la distancia real vs planificada.
-      let finalCo2: number | null = null;
-      if (estimate?.co2SavedKg != null && route?.distance?.value) {
-        const planM = route.distance.value;
-        const ratio = planM > 0 ? Math.min(traveledDistMRef.current / planM, 1) : 1;
-        finalCo2 = Number((estimate.co2SavedKg * ratio).toFixed(4));
-      } else if (estimate?.co2EmissionsKg != null && route?.distance?.value) {
-        const planM = route.distance.value;
-        const ratio = planM > 0 ? Math.min(traveledDistMRef.current / planM, 1) : 1;
-        finalCo2 = Number((estimate.co2EmissionsKg * ratio).toFixed(4));
-      }
+  const closePoiSheet = useCallback(() => {
+    poiRequestIdRef.current++;
+    poiManager.closePoiSheet();
+  }, [poiManager]);
 
-      await completeTrip(activeTripId, {
-        actualDistanceKm: finalDistKm,
-        actualDurationMin: finalDurMin,
-        actualCo2Kg: finalCo2,
-      });
-      console.log('[VIAJE] completado | realDist=', realDistKm.toFixed(2), 'km | durMin=', finalDurMin, '| co2=', finalCo2, '| useReal=', useReal);
-      setActiveTripId(null);
-      stepIndexRef.current = 0;
-      setCurrentStepIndex(0);
-      arrivedRef.current = false;
-      setArrived(false);
-      lastRecenterRef.current = null;
-      traveledDistMRef.current = 0;
-      lastTrackPosRef.current = null;
-      tripStartedAtRef.current = null;
-      Speech.stop();
-      Dialog.alert(
-        t('planRoute.tripCompletedTitle'),
-        t('planRoute.tripCompletedMsg'),
-        [
-          { text: t('planRoute.close') },
-          { text: t('planRoute.viewHistory'), onPress: () => router.push('/(tabs)/history') },
-        ]
-      );
-    } catch (err: any) {
-      setTripError(err?.response?.data?.message || err?.message || t('planRoute.tripErrorFallback'));
-    } finally {
-      setCompleting(false);
-    }
-  };
-
-  completeTripFlowRef.current = completeTripFlow;
-
-  useEffect(() => {
-    console.log('[VIAJE] estado: activeTripId =', activeTripId, '| route steps =', route?.steps?.length ?? 0, '| arrived =', arrived, '| sheet =', showBottomSheet);
-  }, [activeTripId, route, arrived, showBottomSheet]);
-
-  useEffect(() => {
-    stepIndexRef.current = 0;
-    setCurrentStepIndex(0);
-    arrivedRef.current = false;
-    setArrived(false);
-    lastRecenterRef.current = null;
-    preAlertRef.current.clear();
-    Speech.stop();
-  }, [route]);
-
-  const speak = (text: string) => {
-    if (!voiceOnRef.current || !text) return;
-    Speech.stop()
-      .catch(() => {})
-      .then(() => {
-        if (!voiceOnRef.current) return;
-        try {
-          Speech.speak(text, { language: 'es-ES', rate: 1.05 });
-        } catch {}
-      });
-  };
-
-  const toggleVoice = () => {
-    const next = !voiceOnRef.current;
-    voiceOnRef.current = next;
-    setVoiceOn(next);
-    if (!next) Speech.stop();
-  };
-
-  const handlePosition = (coords: { latitude: number; longitude: number }) => {
-    const p: PlacePoint = {
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-      name: t('planRoute.myLocation'),
-    };
-    setUserPos(p);
-
-    // Acumular distancia real recorrida mientras el viaje está activo.
-    if (activeTripId) {
-      const last = lastTrackPosRef.current;
-      if (last) {
-        const d = haversineM(p, last);
-        // Ignorar saltos GPS > 500 m (ruido) para no inflar la distancia.
-        if (d > 0 && d < 500) {
-          traveledDistMRef.current += d;
-        }
-      }
-      lastTrackPosRef.current = { latitude: p.latitude, longitude: p.longitude };
-    }
-
-    const steps = routeRef.current?.steps || [];
-    const idx = stepIndexRef.current;
-
-    if (steps.length > 0 && idx < steps.length) {
-      const cur = steps[idx];
-      const nextS = steps[idx + 1];
-
-      if (cur?.endLocation?.latitude && nextS?.instruction) {
-        const dToEnd = haversineM(p, cur.endLocation);
-        if (dToEnd <= 80 && dToEnd > 40 && !preAlertRef.current.has(idx)) {
-          preAlertRef.current.add(idx);
-          const m = Math.max(10, Math.round(dToEnd / 10) * 10);
-          speak(`En ${m} metros, ${nextS.instruction}`);
-        }
-      }
-
-      let newIdx = idx;
-      for (let i = idx; i < Math.min(idx + 3, steps.length); i++) {
-        const end = steps[i]?.endLocation;
-        if (end?.latitude && haversineM(p, end) < 35) newIdx = i + 1;
-      }
-      if (newIdx !== idx) {
-        stepIndexRef.current = newIdx;
-        setCurrentStepIndex(newIdx);
-        if (steps[newIdx]?.instruction) speak(steps[newIdx].instruction);
-        setRegion({ ...p, latitudeDelta: 0.006, longitudeDelta: 0.006 });
-        lastRecenterRef.current = p;
+  const handlePoiCategory = useCallback(
+    async (category: PoiCategory | null, centerOverride?: { latitude: number; longitude: number }) => {
+      if (!category) {
+        closePoiSheet();
         return;
       }
-    }
-
-    const dest = destinationRef.current;
-    if (dest && !arrivedRef.current && haversineM(p, dest) < 40) {
-      arrivedRef.current = true;
-      setArrived(true);
-      stepIndexRef.current = steps.length;
-      setCurrentStepIndex(steps.length);
-      setRegion({ ...p, latitudeDelta: 0.005, longitudeDelta: 0.005 });
-      lastRecenterRef.current = p;
-      speak(t('planRoute.arrivedSpeak'));
-      Dialog.alert(t('planRoute.arrivedAlertTitle'), t('planRoute.arrivedAlertMsg'), [
-        { text: t('planRoute.later') },
-        { text: t('planRoute.completeTrip'), onPress: () => completeTripFlowRef.current() },
-      ]);
-      return;
-    }
-
-    const last = lastRecenterRef.current;
-    if (!last || haversineM(p, last) > 150) {
-      setRegion({
-        latitude: p.latitude,
-        longitude: p.longitude,
-        latitudeDelta: 0.008,
-        longitudeDelta: 0.008,
-      });
-      lastRecenterRef.current = p;
-    }
-  };
-
-  useEffect(() => {
-    if (!activeTripId) return;
-    let sub: Location.LocationSubscription | null = null;
-    (async () => {
-      const perm = await Location.getForegroundPermissionsAsync();
-      if (perm.status !== 'granted') {
-        const req = await Location.requestForegroundPermissionsAsync();
-        if (req.status !== 'granted') return;
+      const currentReqId = ++poiRequestIdRef.current;
+      if (poiRequestIdRef.current !== currentReqId) {
+        return;
       }
-      sub = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.Balanced, timeInterval: 3000, distanceInterval: 10 },
-        pos => handlePosition(pos.coords)
-      );
-    })();
-    return () => {
-      sub?.remove();
-      sub = null;
-      Speech.stop();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTripId]);
-
-  const handleSheetChange = (index: number) => {
-    console.log('[SHEET] onChange index=', index);
-    if (index === -1) {
-      setShowBottomSheet(false);
-      setSheetIndex(0);
-    } else {
-      setSheetIndex(index);
-    }
-  };
-
-  const handlePoiSheetChange = (index: number) => {
-    if (index === -1) closePoiSheet();
-  };
-
-  const openSearch = () => setSearchExpanded(true);
-
-  const closeSearch = () => {
-    setSearchExpanded(false);
-    Keyboard.dismiss();
-    setShowOriginSuggestions(false);
-    setShowDestSuggestions(false);
-  };
-
-  const runDirections = async () => {
-    closeSearch();
-    await calculateRoute();
-  };
-
-  const handleExploreAction = (key: ExploreAction) => {
-    if (key === 'plan') openSearch();
-    else if (key === 'favorites') {
-      // Modo invitado: esas pantallas son de cuenta personal.
-      if (isGuest) return requireAccount(t('tabs.favorites'));
-      router.push('/(tabs)/favorites');
-    } else if (key === 'history') {
-      if (isGuest) return requireAccount(t('tabs.history'));
-      router.push('/(tabs)/history');
-    }
-  };
-
-  const handleQuickPlace = (place: ExplorePlace) => {
-    setDestination({ latitude: place.lat, longitude: place.lng, name: place.name });
-    setDestQuery(place.name);
-  };
-
-  const routeMidpoint = (): { latitude: number; longitude: number } | null => {
-    if (route?.polyline) {
-      const pts = decodePolyline(route.polyline);
-      if (pts.length > 0) return pts[Math.floor(pts.length / 2)];
-    }
-    return null;
-  };
-
-  const closePoiSheet = () => {
-    setActivePoiCategory(null);
-    setPoiPlaces([]);
-    setSelectedPoiId(null);
-    setShowPoiSheet(false);
-  };
-
-  const handlePoiCategory = async (
-    category: PoiCategory | null,
-    centerOverride?: { latitude: number; longitude: number }
-  ) => {
-    if (!category) {
-      closePoiSheet();
-      return;
-    }
-    setActivePoiCategory(category);
-    setSelectedPoiId(null);
-    // En modo "elegir parada" solo se muestran los markers en el mapa.
-    setShowPoiSheet(!pickingStop);
-    setLoadingPois(true);
-    try {
-      const center =
-        centerOverride ?? { latitude: region.latitude, longitude: region.longitude };
-      const places = await getNearbyPlaces(center, category.placeType, 5000);
-      setPoiPlaces(places);
-      console.log('[POI]', category.id, '→', places.length, 'lugares');
-    } finally {
-      setLoadingPois(false);
-    }
-  };
+      return poiManager.handlePoiCategory(category, centerOverride);
+    },
+    [closePoiSheet, poiManager]
+  );
 
   const selectPoiPlace = (place: NearbyPlace) => {
-    setSelectedPoiId(place.placeId);
-    mapRef.current?.animateToRegion?.(
-      {
-        latitude: place.latitude,
-        longitude: place.longitude,
-        latitudeDelta: 0.006,
-        longitudeDelta: 0.006,
-      },
-      400
-    );
+    selectPoiPlaceBase(place, (r, dur) => mapRef.current?.animateToRegion?.(r, dur));
   };
 
+  const handlePoiClick = (e: any) => {
+    poiManager.handlePoiClick(e, (r, dur) => mapRef.current?.animateToRegion?.(r, dur));
+  };
+
+  // 6. Reportes Comunitarios y Votaciones
+  const reports = useCommunityReports({
+    t,
+    defaultCenter: region,
+  });
+
+  const {
+    nearbyReports,
+    selectedReport,
+    setSelectedReport,
+    votingId,
+    reportSheetOpen,
+    setReportSheetOpen,
+    refreshNearbyReports,
+    debounceRefreshReports,
+    voteOnReport,
+  } = reports;
+
+  const handleRegionComplete = (r: any) => {
+    syncRegion(r);
+    debounceRefreshReports(r, 1500);
+  };
+
+  // 7. Acciones HU-02: POI -> Calcular Ruta / Iniciar Viaje
   const routeToPoi = async (place: NearbyPlace) => {
     const dest: PlacePoint = {
       latitude: place.latitude,
       longitude: place.longitude,
       name: place.name,
     };
-    setDestination(dest);
-    setDestQuery(place.name);
+    routePlanning.setDestination(dest);
+    routePlanning.setDestQuery(place.name);
     closePoiSheet();
-    if (!origin) {
+    const curOrigin = origin || userPos;
+    if (!curOrigin) {
+      Dialog.alert(t('common.errorTitle'), t('planRoute.selectOrigin'), { tone: 'error' });
+      openSearch();
+      return null;
+    }
+    if (!origin && userPos) {
+      routePlanning.setOrigin(userPos);
+    }
+    return await calculateRoute(mode, curOrigin, dest);
+  };
+
+  const startTripToPoi = async (place: NearbyPlace) => {
+    const dest: PlacePoint = {
+      latitude: place.latitude,
+      longitude: place.longitude,
+      name: place.name,
+    };
+    routePlanning.setDestination(dest);
+    routePlanning.setDestQuery(place.name);
+    closePoiSheet();
+    const curOrigin = origin || userPos;
+    if (!curOrigin) {
       Dialog.alert(t('common.errorTitle'), t('planRoute.selectOrigin'), { tone: 'error' });
       openSearch();
       return;
     }
-    await calculateRoute(mode, origin, dest);
+    if (!origin && userPos) {
+      routePlanning.setOrigin(userPos);
+    }
+    let activeRoute = route;
+    if (!activeRoute || destination?.latitude !== dest.latitude || destination?.longitude !== dest.longitude) {
+      activeRoute = await calculateRoute(mode, curOrigin, dest);
+    }
+    if (activeRoute) {
+      await startTripFlowWith(curOrigin, dest, activeRoute);
+    }
   };
 
-  // --- Acciones del sheet de ruta: paradas / compartir / guardar ---
-
+  // 8. Paradas intermedias
   const startPickStop = () => {
     setPickingStop(true);
     setShowBottomSheet(false);
@@ -926,290 +410,149 @@ export default function PlanRouteScreen() {
   };
 
   const addStop = async (place: NearbyPlace) => {
-    const stop: PlacePoint = {
-      latitude: place.latitude,
-      longitude: place.longitude,
-      name: place.name,
-    };
-    setPickingStop(false);
     closePoiSheet();
-    setRouteStop(stop);
-    if (Platform.OS === 'android') {
-      ToastAndroid.show(`Parada agregada: ${place.name}`, ToastAndroid.SHORT);
+    await addPlanningStop(place);
+  };
+
+  // 9. Búsqueda y Navegación
+  const openSearch = () => setSearchExpanded(true);
+  const closeSearch = () => setSearchExpanded(false);
+
+  const runDirections = async () => {
+    closeSearch();
+    await calculateRoute();
+  };
+
+  const handleExploreAction = useCallback((action: ExploreAction) => {
+    switch (action) {
+      case 'plan':
+        openSearch();
+        break;
+      case 'favorites':
+        router.push('/(tabs)/favorites');
+        break;
+      case 'history':
+        router.push('/(tabs)/history');
+        break;
     }
+  }, [router]);
+
+  const handleQuickPlace = (place: ExplorePlace) => {
+    routePlanning.setDestination({
+      latitude: place.lat,
+      longitude: place.lng,
+      name: place.name,
+    });
+    routePlanning.setDestQuery(place.name);
+    setRegion({
+      latitude: place.lat,
+      longitude: place.lng,
+      latitudeDelta: 0.05,
+      longitudeDelta: 0.05,
+    });
+  };
+
+  const handleSheetChange = useCallback((index: number) => {
+    setSheetIndex(index);
+    if (index === -1) {
+      setShowBottomSheet(false);
+    }
+  }, []);
+
+  const handlePoiSheetChange = useCallback(
+    (index: number) => {
+      if (index === -1) {
+        closePoiSheet();
+      }
+    },
+    [closePoiSheet]
+  );
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    getCurrentLocation(true);
+    refreshNearbyReports();
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const oLat = searchParams.originLat ? Number(searchParams.originLat) : null;
+    const oLng = searchParams.originLng ? Number(searchParams.originLng) : null;
+    const dLat = searchParams.destLat ? Number(searchParams.destLat) : null;
+    const dLng = searchParams.destLng ? Number(searchParams.destLng) : null;
+    const oName = typeof searchParams.originName === 'string' ? searchParams.originName : null;
+    const dName = typeof searchParams.destName === 'string' ? searchParams.destName : null;
+    const pMode = searchParams.mode;
+
+    const hasOrigin = oLat != null && oLng != null && !isNaN(oLat) && !isNaN(oLng);
+    const hasDest = dLat != null && dLng != null && !isNaN(dLat) && !isNaN(dLng);
+
+    if (!hasOrigin && !hasDest) return;
+    favParamsRef.current = true;
+
+    if (hasOrigin) {
+      const point: PlacePoint = { latitude: oLat, longitude: oLng, name: oName || '' };
+      routePlanning.setOrigin(point);
+      routePlanning.setOriginQuery(oName || '');
+    }
+    if (hasDest) {
+      const point: PlacePoint = { latitude: dLat, longitude: dLng, name: dName || '' };
+      routePlanning.setDestination(point);
+      routePlanning.setDestQuery(dName || '');
+    }
+    if (pMode === 'walking') routePlanning.setMode('walking');
+
+    const midLat = hasOrigin && hasDest ? (oLat + dLat) / 2 : hasDest ? dLat! : oLat!;
+    const midLng = hasOrigin && hasDest ? (oLng + dLng) / 2 : hasDest ? dLng! : oLng!;
+    setRegion({ latitude: midLat, longitude: midLng, latitudeDelta: 0.08, longitudeDelta: 0.08 });
+  }, []);
+
+  useEffect(() => {
+    const center = userPos
+      ? { latitude: userPos.latitude, longitude: userPos.longitude }
+      : { latitude: region.latitude, longitude: region.longitude };
+    loadPopularPlaces(center);
+  }, [userPos?.latitude, userPos?.longitude, loadPopularPlaces]);
+
+  useEffect(() => {
     if (origin && destination) {
-      await calculateRoute(mode, origin, destination, stop);
+      tripLifecycle.refreshFavoriteFlag(origin, destination);
     }
-  };
-
-  const removeStop = async () => {
-    setRouteStop(null);
-    if (origin && destination) {
-      await calculateRoute(mode, origin, destination, null);
-    }
-  };
-
-  const shareRoute = async () => {
-    if (isGuest) return requireAccount(t('planRoute.actionShare'));
-    if (!route || !origin || !destination) return;
-    try {
-      await Share.share({
-        message:
-          `Ruta en EcoRuteando\n` +
-          `${origin.name} → ${destination.name}\n` +
-          `${Math.round(route.duration.value / 60)} min • ${(route.distance.value / 1000).toFixed(1)} km` +
-          (routeStop ? `\nParada: ${routeStop.name}` : '') +
-          `\n\nReporta obstáculos en el camino con EcoRuteando`,
-      });
-    } catch {}
-  };
-
-  // ¿La ruta recién calculada ya está en Favoritos? (la busca por nombre)
-  const refreshFavoriteFlag = async (o: PlacePoint, d: PlacePoint) => {
-    if (isGuest) return;
-    try {
-      const rid = await findRouteIdByName(buildSavePayload(o, d).name);
-      setRouteFav(!!rid && favIdsRef.current.has(rid));
-    } catch {
-      setRouteFav(false);
-    }
-  };
-
-  // Guardar en Favoritos / quitar de Favoritos (botón al lado de «Guardar»).
-  const toggleFavorite = async () => {
-    if (isGuest) return requireAccount(t('tabs.favorites'));
-    if (!route || !origin || !destination) return;
-    try {
-      let rid = routeSavedId;
-      if (!rid) {
-        const payload = buildSavePayload(origin, destination);
-        const byName = await findRouteIdByName(payload.name);
-        rid = byName ?? (await saveRouteSmart(payload)).id;
-        setRouteSavedId(rid);
-        setRouteSaved(true);
-      }
-      const wasFav = favIdsRef.current.has(rid);
-      if (wasFav) {
-        await apiClient.delete(`/api/favorites/${rid}`);
-        favIdsRef.current.delete(rid);
-        setRouteFav(false);
-        if (Platform.OS === 'android') ToastAndroid.show(t('planRoute.favoriteRemoved'), ToastAndroid.SHORT);
-        else Dialog.alert(t('planRoute.favoriteRemoved'), t('planRoute.favoriteRemovedMsg'));
-      } else {
-        await apiClient.post('/api/favorites', { routeId: rid });
-        favIdsRef.current.add(rid);
-        setRouteFav(true);
-        if (Platform.OS === 'android') ToastAndroid.show(t('planRoute.favoriteAdded'), ToastAndroid.SHORT);
-        else Dialog.alert(t('planRoute.favoriteAdded'), t('planRoute.favoriteAddedMsg'));
-      }
-    } catch (e: any) {
-      const msg = apiErrorMessage(e);
-      if (msg.includes('iniciar sesión')) {
-        requireAccount(t('tabs.favorites'));
-      } else {
-        Dialog.alert(t('favorites.title'), msg || t('planRoute.unexpectedError'), { tone: 'error' });
-      }
-    }
-  };
-
-  const saveCurrentRoute = async () => {
-    if (isGuest) return requireAccount(t('planRoute.actionSave'));
-    if (!route || !origin || !destination || routeSaved) return;
-    try {
-      const payload = buildSavePayload(origin, destination);
-      console.log('[RUTA] guardar intento:', JSON.stringify({ name: payload.name, startName: payload.startName, destinationName: payload.destinationName, transportType: payload.transportType, distanceKm: payload.distanceKm, estimatedTimeMin: payload.estimatedTimeMin }));
-      let rid = routeSavedId;
-      let reused = false;
-      if (!rid) {
-        const res = await saveRouteSmart(payload);
-        rid = res.id;
-        reused = res.reused;
-      }
-      setRouteSavedId(rid);
-      setRouteSaved(true);
-      if (reused) {
-        Dialog.alert(t('planRoute.routeAlreadySaved'), t('planRoute.routeAlreadySavedMsg'), { tone: 'info' });
-      } else if (Platform.OS === 'android') {
-        ToastAndroid.show(t('planRoute.routeSaved'), ToastAndroid.SHORT);
-      } else {
-        Dialog.alert(t('planRoute.routeSaved'), t('planRoute.routeSavedMsg'));
-      }
-    } catch (e: any) {
-      const msg = apiErrorMessage(e);
-      console.log('[RUTA] guardar ERROR:', msg || e?.message);
-      if (msg.includes('iniciar sesión')) {
-        requireAccount(t('planRoute.actionSave'));
-      } else {
-        Dialog.alert(t('planRoute.saveError'), msg || t('planRoute.unexpectedError'), { tone: 'error' });
-      }
-    }
-  };
-
-  const refreshNearbyReports = async (center?: { latitude: number; longitude: number }) => {
-    try {
-      const c = center ?? region;
-      const reports = await getNearbyReports(c.latitude, c.longitude, 2000);
-      setNearbyReports(reports);
-      console.log('[REPORTS]', reports.length, 'reportes cercanos');
-    } catch (e: any) {
-      console.log('[REPORTS] error:', e?.message);
-    }
-  };
-
-  const handleRegionComplete = (r: any) => {
-    syncRegion(r);
-    if (reportRefreshTimer.current) clearTimeout(reportRefreshTimer.current);
-    reportRefreshTimer.current = setTimeout(() => refreshNearbyReports(r), 1500);
-  };
-
-  const voteOnReport = async (report: NearbyReport, confirm: boolean) => {
-    if (isGuest) return requireAccount(t('planRoute.actionVote'));
-    if (votingId) return;
-    let pos = userPos;
-    if (!pos) {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const loc = await Location.getCurrentPositionAsync({});
-          pos = {
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-            name: t('planRoute.myLocation'),
-          };
-          setUserPos(pos);
-        }
-      } catch {}
-    }
-    if (!pos) {
-      Dialog.alert(t('planRoute.locationRequiredTitle'), t('planRoute.voteLocationMsg'), { tone: 'warning', icon: 'navigate-circle' });
-      return;
-    }
-    setVotingId(report.id);
-    try {
-      const result = await voteReport(report.id, confirm, pos.latitude, pos.longitude);
-      setNearbyReports(prev =>
-        prev
-          .map(r =>
-            r.id === report.id
-              ? {
-                  ...r,
-                  confidenceScore: result.confidenceScore,
-                  confirmCount: result.confirmCount,
-                  rejectCount: result.rejectCount,
-                  state: result.state,
-                }
-              : r
-          )
-          .filter(r => r.confidenceScore >= 40 && r.state !== 'disputed')
-      );
-      setSelectedReport(null);
-      const msg = confirm
-        ? t('planRoute.voteConfirmed')
-        : t('planRoute.voteRejected');
-      if (Platform.OS === 'android') {
-        ToastAndroid.show(msg, ToastAndroid.SHORT);
-      } else {
-        Dialog.alert(t('planRoute.voteThanks'), msg);
-      }
-      console.log('[REPORTS] voto', confirm ? '👍' : '👎', report.id, '→', result.state, result.confidenceScore);
-    } catch (e: any) {
-      Dialog.alert(t('planRoute.voteError'), e?.message ?? t('planRoute.unexpectedError'), { tone: 'error' });
-    } finally {
-      setVotingId(null);
-    }
-  };
-
-  const clearOrigin = () => {
-    setOriginQuery('');
-    setOrigin(null);
-    setOriginSuggestions([]);
-    setShowOriginSuggestions(false);
-  };
-
-  const clearDest = () => {
-    setDestQuery('');
-    setDestination(null);
-    setDestSuggestions([]);
-    setShowDestSuggestions(false);
-  };
-
-  const openProfile = () => {
-    // Invitado: nunca abrimos el perfil; pedimos una cuenta.
-    if (isGuest) return requireAccount(t('tabs.profile'));
-    router.push('/(tabs)/profile');
-  };
+  }, [origin, destination, tripLifecycle]);
 
   const fabBottom = insets.bottom + EXPLORE_PEEK + 16;
   const poiSheetOpen = showPoiSheet && !!activePoiCategory;
-  const exploreVisible = !showBottomSheet && !searchExpanded && !poiSheetOpen && !selectedReport && !reportSheetOpen && !pickingStop;
+  const exploreVisible =
+    !showBottomSheet &&
+    !searchExpanded &&
+    !poiSheetOpen &&
+    !selectedReport &&
+    !reportSheetOpen &&
+    !pickingStop;
   const planning = !!origin && !!destination && !searchExpanded;
-  const poiChipsVisible = !searchExpanded && !showBottomSheet && !planning && !activeTripId && !pickingStop;
+  const poiChipsVisible =
+    !searchExpanded && !showBottomSheet && !planning && !activeTripId && !pickingStop;
 
-  const routeSnapPoints = useMemo(
-    () => [`${ROUTE_SHEET_MIN_SNAP * 100}%`, '82%', '95%'],
-    []
-  );
-
+  const routeSnapPoints = useMemo(() => [`${ROUTE_SHEET_MIN_SNAP * 100}%`, '82%', '95%'], []);
   const snapIdx = Math.min(Math.max(sheetIndex, 0), ROUTE_SNAP_PERCENTS.length - 1);
-  const routeSheetContentHeight =
-    SCREEN_H * ROUTE_SNAP_PERCENTS[snapIdx] - SHEET_CONTENT_RESERVE;
-
-  console.log(
-    '[STATE] sheet=', showBottomSheet, '| route=', !!route, '| search=', searchExpanded,
-    '| poiSheet=', poiSheetOpen, '| report=', reportSheetOpen, '| selRep=', !!selectedReport,
-    '| pick=', pickingStop, '| loading=', loading, '| origin=', !!origin, '| dest=', !!destination,
-    '| explore=', exploreVisible, '| snaps=', routeSnapPoints.join('/'),
-    '| screenH=', SCREEN_H, '| idx=', sheetIndex, '| contentH=', Math.round(routeSheetContentHeight),
-    '| winScale=', Dimensions.get('window').scale, '| insets=', insets.bottom
-  );
+  const routeSheetContentHeight = SCREEN_H * ROUTE_SNAP_PERCENTS[snapIdx] - SHEET_CONTENT_RESERVE;
 
   const exploreSnapPoints = useMemo(() => [EXPLORE_PEEK, '50%', '88%'], []);
   const poiSnapPoints = useMemo(() => ['50%', '88%'], []);
+  const mapPoiSnapPoints = useMemo(() => [210], []);
   const reportSnapPoints = useMemo(() => ['45%'], []);
   const reportFormSnapPoints = useMemo(() => ['80%'], []);
   const addStopSnapPoints = useMemo(() => ['78%'], []);
-  const addStopScrollRef = useRef(null);
-
-  const dragPillPan = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) =>
-          Math.abs(g.dx) > 5 || Math.abs(g.dy) > 5,
-        onPanResponderGrant: () => {
-          pillStartRef.current = pillPosRef.current;
-        },
-        onPanResponderMove: (_, g) => {
-          const start = pillStartRef.current;
-          if (!start) return;
-          const { w, h } = pillSizeRef.current;
-          const minX = 8;
-          const maxX = Math.max(minX, SCREEN_W - w - 8);
-          const minY = insetsRef.current + 56;
-          const maxY = Math.max(
-            minY,
-            SCREEN_H - TAB_BAR_HEIGHT - h - 12
-          );
-          const next = {
-            left: Math.min(Math.max(minX, start.left + g.dx), maxX),
-            top: Math.min(Math.max(minY, start.top + g.dy), maxY),
-          };
-          pillPosRef.current = next;
-          setPillPos(next);
-        },
-      }),
-    []
-  );
-
-  routeRef.current = route;
-  destinationRef.current = destination;
 
   const navSteps: any[] = route?.steps || [];
   const navStep = currentStepIndex < navSteps.length ? navSteps[currentStepIndex] : null;
   const navInstruction = arrived
     ? t('planRoute.navArrived')
     : navStep?.instruction || t('planRoute.navContinue');
-  const navTarget =
-    navStep?.endLocation?.latitude != null ? navStep.endLocation : destination;
+  const navTarget = navStep?.endLocation?.latitude != null ? navStep.endLocation : destination;
   const navDistText =
     userPos && navTarget && !arrived ? formatMeters(haversineM(userPos, navTarget)) : null;
   const remainingM = navSteps
@@ -1219,165 +562,48 @@ export default function PlanRouteScreen() {
     .slice(currentStepIndex)
     .reduce((s: number, x: any) => s + (x.duration?.value || 0), 0);
   const navRemDist = formatMeters(remainingM);
-  const navRemDur =
-    remainingS >= 60
-      ? `${Math.max(1, Math.round(remainingS / 60))} min`
-      : `${Math.max(1, Math.round(remainingS))} s`;
+  const navRemDur = Math.round(remainingS / 60) + ' min';
 
   return (
-    <View style={[styles.container, isDark && { backgroundColor: '#1c1c1e' }]}>
+    <View style={styles.container}>
       <MapView
         ref={mapRef}
         style={styles.map}
-        initialRegion={{
-          latitude: region.latitude,
-          longitude: region.longitude,
-          latitudeDelta: region.latitudeDelta,
-          longitudeDelta: region.longitudeDelta,
-        }}
+        initialRegion={DEFAULT_REGION}
         region={region}
-        provider={PROVIDER_GOOGLE}
-        showsUserLocation={true}
-        showsMyLocationButton={false}
-        showsCompass={true}
-        rotateEnabled={true}
-        pitchEnabled={true}
         onRegionChangeComplete={handleRegionComplete}
-        onMapReady={() => console.log('[MAPA] onMapReady - MapView montado')}
-        onMapLoaded={() => console.log('[MAPA] onMapLoaded - teselas cargadas')}
+        showsUserLocation
+        showsMyLocationButton={false}
+        showsCompass={false}
+        onPoiClick={handlePoiClick}
+        onPress={handleMapPress}
       >
-        {origin && (
-          <Marker coordinate={origin} title={t('planRoute.origin')} description={origin.name}>
-            <View style={styles.originMarker}>
-              <View style={styles.markerPin} />
-            </View>
-          </Marker>
-        )}
-        {destination && (
-          <Marker coordinate={destination} title={t('planRoute.destination')} description={destination.name}>
-            <View style={styles.destMarker}>
-              <View style={styles.markerPinRed} />
-            </View>
-          </Marker>
-        )}
-        {activePoiCategory &&
-          poiPlaces.map(place => (
-            <Marker
-              key={place.placeId}
-              coordinate={{ latitude: place.latitude, longitude: place.longitude }}
-              onPress={() => setSelectedPoiId(place.placeId)}
-            >
-              <View
-                style={[
-                  styles.poiMarker,
-                  { borderColor: activePoiCategory.color },
-                  selectedPoiId === place.placeId && styles.poiMarkerSelected,
-                ]}
-              >
-                <Ionicons
-                  name={activePoiCategory.icon as any}
-                  size={selectedPoiId === place.placeId ? 16 : 13}
-                  color={activePoiCategory.color}
-                />
-              </View>
-              <Callout
-                tooltip
-                onPress={() => (pickingStop ? addStop(place) : routeToPoi(place))}
-              >
-                <View style={styles.poiCallout}>
-                  <Text style={styles.poiCalloutName} numberOfLines={1}>
-                    {place.name}
-                  </Text>
-                  <View style={styles.poiCalloutRow}>
-                    <Ionicons
-                      name={pickingStop ? 'add-circle' : 'navigate'}
-                      size={12}
-                      color="#1a73e8"
-                    />
-                    <Text style={styles.poiCalloutAction}>
-                      {pickingStop ? t('planRoute.addAsStop') : t('planRoute.howToGet')}
-                    </Text>
-                  </View>
-                </View>
-              </Callout>
-            </Marker>
-          ))}
-        {/* HU-22 / CU22: reportes de obstáculos con confianza comunitaria */}
-        {nearbyReports.map(rep => (
-          <Marker
-            key={`report-${rep.id}`}
-            coordinate={{ latitude: rep.latitude, longitude: rep.longitude }}
-            anchor={{ x: 0.5, y: 0.5 }}
-            zIndex={1000}
-            onPress={() => setSelectedReport(rep)}
-          >
-            <View
-              style={[
-                styles.reportMarker,
-                {
-                  backgroundColor:
-                    rep.confidenceScore >= 70 ? '#16a34a' : '#d97706',
-                },
-              ]}
-            >
-              <Ionicons name="warning" size={14} color="#ffffff" />
-            </View>
-          </Marker>
-        ))}
-        {route?.polyline && (
-          <Polyline
-            coordinates={decodePolyline(route.polyline)}
-            strokeColor="#16a34a"
-            strokeWidth={5}
-            geodesic
-          />
-        )}
-        {/* Rutas alternativas: líneas finas + pastilla "X min más lento/rápido" */}
-        {route?.polyline &&
-          !selectedReport &&
-          !reportSheetOpen &&
-          routeAlts.map((alt, ai) => {
-            const pts = decodePolyline(alt.polyline);
-            if (pts.length < 2) return null;
-            const mid = pts[Math.floor(pts.length / 2)];
-            const diffMin = Math.round(
-              ((alt.duration?.value ?? 0) - (route.duration?.value ?? 0)) / 60
-            );
-            const label =
-              diffMin > 0
-                ? t('planRoute.minSlower').replace('{n}', String(diffMin))
-                : diffMin < 0
-                ? t('planRoute.minFaster').replace('{n}', String(-diffMin))
-                : t('planRoute.sameTime');
-            return (
-              <React.Fragment key={`alt-${ai}`}>
-                <Polyline
-                  coordinates={pts}
-                  strokeColor={ai === 0 ? '#8ab4f8' : '#bdc1c6'}
-                  strokeWidth={4}
-                  geodesic
-                  zIndex={1}
-                />
-                <Marker coordinate={mid} zIndex={500} anchor={{ x: 0.5, y: 0.5 }}>
-                  <TouchableOpacity
-                    style={styles.altPill}
-                    onPress={() => handleSelectRoute(ai + 1)}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.altPillText}>{label}</Text>
-                  </TouchableOpacity>
-                </Marker>
-              </React.Fragment>
-            );
-          })}
+        <PlanRouteMapMarkers
+          t={t}
+          origin={origin}
+          destination={destination}
+          routeStop={routeStop}
+          route={route}
+          routeAlts={routeAlts}
+          poiPlaces={poiPlaces}
+          selectedPoiId={selectedPoiId}
+          activePoiCategory={activePoiCategory}
+          nearbyReports={nearbyReports}
+          selectedMapPoi={selectedMapPoi}
+          onSelectRoute={handleSelectRoute}
+          onSelectPoiPlace={selectPoiPlace}
+          onSelectReport={setSelectedReport}
+          onRouteToPoi={routeToPoi}
+          onStartTripToPoi={startTripToPoi}
+        />
       </MapView>
 
-      {/* Barra de búsqueda flotante / panel expandido */}
+      {/* Barra de búsqueda flotante y panel expandido */}
       <MapSearchPanel
         expanded={searchExpanded}
         onExpand={openSearch}
         onClose={closeSearch}
-        onOpenProfile={openProfile}
+        onOpenProfile={() => router.push('/(tabs)/profile')}
         originQuery={originQuery}
         onOriginChange={handleOriginChange}
         onOriginFocus={() => setShowOriginSuggestions(true)}
@@ -1392,23 +618,21 @@ export default function PlanRouteScreen() {
         destSuggestions={destSuggestions}
         showDestSuggestions={showDestSuggestions}
         onSelectDest={selectDestination}
-        onLocatePress={getCurrentLocation}
+        onLocatePress={() => getCurrentLocation(false)}
         onSwap={swapLocations}
         onDirections={runDirections}
         directionsReady={!!origin && !!destination}
         loading={loading}
       />
 
-      {/* Categorías de lugares cercanos estilo Google Maps */}
+      {/* Categorías de lugares cercanos */}
       {poiChipsVisible && (
         <View style={[styles.poiChipsRow, { top: insets.top + 64 }]}>
           <PoiChips active={activePoiCategory?.id ?? null} onSelect={handlePoiCategory} />
         </View>
       )}
 
-      {/* Modo "elegir parada": la hoja Agregar paradas maneja el flujo */}
-
-      {/* Navegación in-app: guía de maniobra mientras el viaje está activo */}
+      {/* Banner de maniobra y voz durante viaje activo */}
       {activeTripId && route && navSteps.length > 0 && (
         <NavigationBanner
           insetTop={insets.top}
@@ -1425,7 +649,7 @@ export default function PlanRouteScreen() {
         />
       )}
 
-      {/* Modo de transporte (solo en fase de planificación, fuera de viaje activo) */}
+      {/* Selector de modo de transporte */}
       {planning && !activeTripId && (
         <View style={[styles.modeRow, { top: insets.top + 72 }]}>
           {TRANSPORT_MODES.map(m => {
@@ -1437,11 +661,7 @@ export default function PlanRouteScreen() {
                 onPress={() => changeMode(m.id)}
                 activeOpacity={0.8}
               >
-                <Ionicons
-                  name={m.icon as any}
-                  size={16}
-                  color={active ? '#fff' : '#5f6368'}
-                />
+                <Ionicons name={m.icon as any} size={16} color={active ? '#fff' : '#5f6368'} />
                 <Text style={[styles.modeText, active && { color: '#fff' }]}>{t(`modes.${m.id}`)}</Text>
               </TouchableOpacity>
             );
@@ -1449,7 +669,7 @@ export default function PlanRouteScreen() {
         </View>
       )}
 
-      {/* Controles flotantes */}
+      {/* FABs de calcular ruta y ubicación */}
       {exploreVisible && origin && destination && (
         <MapFab
           onPress={() => calculateRoute()}
@@ -1469,533 +689,125 @@ export default function PlanRouteScreen() {
       {exploreVisible && (
         <MapFab
           icon="locate"
-          onPress={getCurrentLocation}
+          onPress={() => getCurrentLocation(false)}
           style={[styles.fab, { bottom: fabBottom }]}
         />
       )}
 
-      {/* Botón para reabrir el panel de ruta cuando está cerrado (viaje activo o planificación) */}
+      {/* Pill flotante para reabrir panel de ruta en viaje activo */}
       {route?.polyline &&
         !showBottomSheet &&
         !selectedReport &&
         !reportSheetOpen &&
         !searchExpanded &&
         !pickingStop && (
-          <View
-            style={
-              pillPos
-                ? [styles.expandSheetWrapPos, { left: pillPos.left, top: pillPos.top }]
-                : [styles.expandSheetWrap, { bottom: fabBottom }]
-            }
-            {...dragPillPan.panHandlers}
-          >
-            <TouchableOpacity
-              ref={pillRef}
-              style={styles.expandSheetFab}
-              onPress={() => setShowBottomSheet(true)}
-              activeOpacity={0.85}
-              onLayout={e => {
-                const { width, height, x, y } = e.nativeEvent.layout;
-                pillSizeRef.current = { w: Math.round(width), h: Math.round(height) };
-                if (!pillPosRef.current) {
-                  requestAnimationFrame(() => {
-                    pillRef.current?.measureInWindow((mx: number, my: number) => {
-                      if (mx == null || my == null || pillPosRef.current) return;
-                      const p = { left: Math.round(mx), top: Math.round(my) };
-                      pillPosRef.current = p;
-                      setPillPos(p);
-                    });
-                  });
-                }
-              }}
-            >
-              <Ionicons name="chevron-up" size={18} color="#16a34a" />
-              <Text style={styles.expandSheetFabText}>
-                {route?.duration?.text ? `${route.duration.text} · ${t('planRoute.viewRoute')}` : t('planRoute.viewRoute')}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <DraggableTripPill
+            route={route}
+            fabBottom={fabBottom}
+            insetsTop={insets.top}
+            onOpenSheet={() => setShowBottomSheet(true)}
+          />
         )}
 
-      {/* Botón Reportar estilo Google Maps: flotante solo con la hoja de ruta cerrada */}
-      {route?.polyline && !showBottomSheet && !selectedReport && !searchExpanded && !reportSheetOpen && !pickingStop && (
-        <TouchableOpacity
-          style={[styles.reportFab, { bottom: fabBottom }]}
-          onPress={() => {
-            if (isGuest) return requireAccount(t('planRoute.actionReport'));
-            setReportSheetOpen(true);
-          }}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="warning" size={18} color="#d93025" />
-          <Text style={styles.reportFabText}>{t('planRoute.report')}</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Bottom sheet: agregar parada > reporte (form) > detalle/voto de reporte > detalles de ruta > POI > panel Explora */}
-      {pickingStop ? (
-        <BottomSheet
-          key="addStopSheet"
-          snapPoints={addStopSnapPoints}
-          index={0}
-          onChange={index => {
-            if (index === -1) cancelPickStop();
-          }}
-          enablePanDownToClose
-          enableDynamicSizing={false}
-          enableContentPanningGesture={false}
-          handleIndicatorStyle={styles.sheetHandle}
-          backgroundStyle={styles.sheetBg}
-        >
-          <AddStopSheet
-            origin={origin}
-            destination={destination}
-            mode={mode}
-            activeCategoryId={activePoiCategory?.id ?? null}
-            places={poiPlaces}
-            loading={loadingPois}
-            searchCenter={routeMidpoint() ?? { latitude: region.latitude, longitude: region.longitude }}
-            onSelectCategory={c => handlePoiCategory(c, routeMidpoint() ?? undefined)}
-            onSelectPlace={selectPoiPlace}
-            onAddPlace={addStop}
-            onClose={cancelPickStop}
-            scrollRef={addStopScrollRef}
-          />
-        </BottomSheet>
-      ) : reportSheetOpen ? (
-        <BottomSheet
-          key="reportFormSheet"
-          snapPoints={reportFormSnapPoints}
-          index={0}
-          onChange={index => {
-            if (index === -1) setReportSheetOpen(false);
-          }}
-          enablePanDownToClose
-          enableDynamicSizing={false}
-          handleIndicatorStyle={styles.sheetHandle}
-          backgroundStyle={styles.sheetBg}
-        >
-          <ReportFormSheet
-            onClose={() => setReportSheetOpen(false)}
-            onSubmitted={() => {
-              setReportSheetOpen(false);
-              refreshNearbyReports();
-            }}
-          />
-        </BottomSheet>
-      ) : selectedReport ? (
-        <BottomSheet
-          key="reportVoteSheet"
-          snapPoints={reportSnapPoints}
-          index={0}
-          onChange={index => {
-            if (index === -1) setSelectedReport(null);
-          }}
-          enablePanDownToClose
-          enableDynamicSizing={false}
-          handleIndicatorStyle={styles.sheetHandle}
-          backgroundStyle={styles.sheetBg}
-        >
-          <ReportVoteSheet
-            report={selectedReport}
-            voting={votingId === selectedReport.id}
-            onClose={() => setSelectedReport(null)}
-            onVote={confirm => voteOnReport(selectedReport, confirm)}
-          />
-        </BottomSheet>
-      ) : showBottomSheet && route ? (
-        <BottomSheet
-          key="routeSheet"
-          ref={bottomSheetRef}
-          snapPoints={routeSnapPoints}
-          index={0}
-          onChange={handleSheetChange}
-          enablePanDownToClose
-          enableDynamicSizing={false}
-          handleComponent={null}
-        >
-          <RouteBottomSheet
-            route={route}
-            estimate={estimate}
-            isGuest={isGuest}
-            activeTripId={activeTripId}
-            startingTrip={startingTrip}
-            completing={completing}
-            tripError={tripError}
-            contentHeight={routeSheetContentHeight}
-            onStartTrip={startTripFlow}
-            onCompleteTrip={completeTripFlow}
-            onClose={() => {
-              setShowBottomSheet(false);
-              setRoute(null);
-              setRouteAlts([]);
-              setEstimate(null);
-              setTripError(null);
-              setRouteStop(null);
-              setRouteSaved(false);
-              setRouteFav(false);
-              setPickingStop(false);
-            }}
-            onSelectRoute={handleSelectRoute}
-            selectedRouteIndex={selectedRouteIndex}
-            routes={route ? [route, ...routeAlts] : []}
-            onAddStop={startPickStop}
-            onShare={shareRoute}
-            onSave={saveCurrentRoute}
-            onToggleFavorite={toggleFavorite}
-            routeFavorited={routeFav}
-            onReport={() => {
-              if (isGuest) return requireAccount(t('planRoute.actionReport'));
-              setReportSheetOpen(true);
-            }}
-            routeSaved={routeSaved}
-            stopName={routeStop?.name ?? null}
-            onRemoveStop={removeStop}
-            activeMode={mode}
-            onModePress={id => changeMode(id as TransportMode)}
-            bottomInset={TAB_BAR_HEIGHT}
-          />
-        </BottomSheet>
-      ) : poiSheetOpen && activePoiCategory ? (
-        <BottomSheet
-          key="poiSheet"
-          snapPoints={poiSnapPoints}
-          index={0}
-          onChange={handlePoiSheetChange}
-          enablePanDownToClose
-          enableDynamicSizing={false}
-          handleIndicatorStyle={styles.sheetHandle}
-          backgroundStyle={styles.sheetBg}
-        >
-          <PoiResultsSheet
-            category={activePoiCategory}
-            places={poiPlaces}
-            loading={loadingPois}
-            center={{ latitude: region.latitude, longitude: region.longitude }}
-            selectedPlaceId={selectedPoiId}
-            onClose={closePoiSheet}
-            onSelectPlace={selectPoiPlace}
-            onRoute={routeToPoi}
-          />
-        </BottomSheet>
-      ) : (
-        exploreVisible && (
-          <BottomSheet
-            key="exploreSheet"
-            snapPoints={exploreSnapPoints}
-            index={0}
-            enablePanDownToClose={false}
-            enableDynamicSizing={false}
-            handleIndicatorStyle={styles.sheetHandle}
-            backgroundStyle={styles.sheetBg}
+      {/* FAB Reportar incidencia */}
+      {route?.polyline &&
+        !showBottomSheet &&
+        !selectedReport &&
+        !searchExpanded &&
+        !reportSheetOpen &&
+        !pickingStop && (
+          <TouchableOpacity
+            style={[styles.reportFab, { bottom: fabBottom }]}
+            onPress={() => setReportSheetOpen(true)}
+            activeOpacity={0.85}
           >
-            <ExploreSheet
-              activeMode={mode}
-              onModePress={id => changeMode(id as TransportMode)}
-              onAction={handleExploreAction}
-              onPlaceSelect={handleQuickPlace}
-              places={poiPlaces.map(p => ({ name: p.name, lat: p.latitude, lng: p.longitude }))}
-            />
-          </BottomSheet>
-        )
-      )}
+            <Ionicons name="warning" size={18} color="#d93025" />
+            <Text style={styles.reportFabText}>{t('planRoute.report')}</Text>
+          </TouchableOpacity>
+        )}
+
+      {/* Orquestador de hojas inferiores (BottomSheets) */}
+      <PlanRouteSheets
+        pickingStop={pickingStop}
+        addStopSnapPoints={addStopSnapPoints}
+        onCancelPickStop={cancelPickStop}
+        origin={origin}
+        destination={destination}
+        mode={mode}
+        activePoiCategory={activePoiCategory}
+        poiPlaces={poiPlaces}
+        loadingPois={loadingPois}
+        searchCenter={routeMidpoint() ?? { latitude: region.latitude, longitude: region.longitude }}
+        onSelectCategory={c => handlePoiCategory(c, routeMidpoint() ?? undefined)}
+        onSelectPoiPlace={selectPoiPlace}
+        onAddStop={addStop}
+        addStopScrollRef={addStopScrollRef}
+
+        reportSheetOpen={reportSheetOpen}
+        reportFormSnapPoints={reportFormSnapPoints}
+        onCloseReportForm={() => setReportSheetOpen(false)}
+        onReportSubmitted={() => {
+          setReportSheetOpen(false);
+          refreshNearbyReports();
+        }}
+
+        selectedReport={selectedReport}
+        reportSnapPoints={reportSnapPoints}
+        votingId={votingId}
+        onCloseReportVote={() => setSelectedReport(null)}
+        onVoteReport={confirm => voteOnReport(selectedReport!, confirm, userPos, () => getCurrentLocation(true))}
+
+        showBottomSheet={showBottomSheet}
+        route={route}
+        bottomSheetRef={bottomSheetRef}
+        routeSnapPoints={routeSnapPoints}
+        onSheetChange={handleSheetChange}
+        estimate={estimate}
+        activeTripId={activeTripId}
+        startingTrip={startingTrip}
+        completing={completing}
+        tripError={tripError}
+        routeSheetContentHeight={routeSheetContentHeight}
+        onStartTrip={startTripFlow}
+        onCompleteTrip={completeTripFlow}
+        onCloseRouteSheet={() => {
+          setShowBottomSheet(false);
+          resetRoute();
+          tripLifecycle.resetTripState();
+        }}
+        onSelectRoute={handleSelectRoute}
+        selectedRouteIndex={selectedRouteIndex}
+        routeAlts={routeAlts}
+        onStartPickStop={startPickStop}
+        onShareRoute={shareRoute}
+        onSaveCurrentRoute={saveCurrentRoute}
+        onToggleFavorite={toggleFavorite}
+        routeFav={routeFav}
+        onOpenReportForm={() => setReportSheetOpen(true)}
+        routeSaved={routeSaved}
+        routeStopName={routeStop?.name ?? null}
+        onRemoveStop={removePlanningStop}
+        onChangeMode={changeMode}
+
+        poiSheetOpen={poiSheetOpen}
+        poiSnapPoints={poiSnapPoints}
+        onPoiSheetChange={handlePoiSheetChange}
+        region={region}
+        selectedPoiId={selectedPoiId}
+        onClosePoiSheet={closePoiSheet}
+        onRouteToPoi={routeToPoi}
+        onStartTripToPoi={startTripToPoi}
+
+        selectedMapPoi={selectedMapPoi}
+        mapPoiSnapPoints={mapPoiSnapPoints}
+        onCloseMapPoiSheet={() => setSelectedMapPoi(null)}
+
+        exploreVisible={exploreVisible}
+        exploreSnapPoints={exploreSnapPoints}
+        onExploreAction={handleExploreAction}
+        onQuickPlace={handleQuickPlace}
+        popularPlaces={popularPlaces}
+      />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  map: {
-    flex: 1,
-  },
-  osmAttribution: {
-    position: 'absolute',
-    bottom: 4,
-    left: 6,
-    fontSize: 10,
-    color: '#5f6368',
-    backgroundColor: 'rgba(255,255,255,0.75)',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 3,
-    zIndex: 80,
-  },
-  modeRow: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    zIndex: 90,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  modePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#dadce0',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  modeText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#5f6368',
-  },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    zIndex: 95,
-  },
-  reportFab: {
-    position: 'absolute',
-    left: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#ffffff',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 5,
-    zIndex: 95,
-  },
-  reportFabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#202124',
-  },
-  altPill: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e8eaed',
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 4,
-  },
-  altPillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#3c4043',
-  },
-  expandSheetWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 95,
-  },
-  expandSheetWrapPos: {
-    position: 'absolute',
-    alignItems: 'center',
-    zIndex: 95,
-  },
-  expandSheetFab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#ffffff',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#e6f4ea',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 5,
-  },
-  expandSheetFabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#16a34a',
-  },
-  sheetHandle: {
-    backgroundColor: '#dadce0',
-    width: 40,
-    height: 4,
-  },
-  sheetBg: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  originMarker: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#16a34a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  markerPin: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#fff',
-  },
-  destMarker: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#ef4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  markerPinRed: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#fff',
-  },
-  poiChipsRow: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    zIndex: 90,
-  },
-  poiMarker: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 4,
-  },
-  poiMarkerSelected: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 3,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  poiCallout: {
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    minWidth: 150,
-    maxWidth: 220,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  poiCalloutName: {
-    fontSize: 13.5,
-    fontWeight: '700',
-    color: '#202124',
-  },
-  poiCalloutRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 3,
-  },
-  poiCalloutAction: {
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: '#1a73e8',
-  },
-  reportMarker: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 4,
-  },
-  reportCalloutDesc: {
-    fontSize: 12,
-    color: '#5f6368',
-    marginTop: 2,
-  },
-  reportCalloutMeta: {
-    fontSize: 12,
-    color: '#5f6368',
-    fontWeight: '600',
-  },
-  reportCalloutState: {
-    fontSize: 12,
-    color: '#5f6368',
-    fontWeight: '600',
-  },
-  reportCalloutQuestion: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: '#202124',
-    marginTop: 6,
-  },
-  reportVoteRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 5,
-  },
-  voteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#dadce0',
-    borderRadius: 8,
-    paddingVertical: 6,
-    backgroundColor: '#f8f9fa',
-  },
-  voteBtnDisabled: {
-    opacity: 0.5,
-  },
-  voteBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-});

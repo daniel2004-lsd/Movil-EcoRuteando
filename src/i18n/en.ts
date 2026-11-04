@@ -154,6 +154,8 @@ export default {
     routeNotFound: 'No route was found',
     routeCalcError: 'The route could not be calculated',
     routeFromApp: 'Route calculated from the mobile app',
+    startTripBtn: 'Start trip',
+    mapPoiSelected: 'Selected place on map',
     startTripError: 'Error starting the trip',
     missingOriginDest: 'Origin or destination is missing to start the trip',
     tripCompletedTitle: 'Trip completed!',
@@ -519,9 +521,6 @@ export default {
     passwordMedium: 'Medium password',
     passwordStrongLabel: 'Strong password',
 
-    // SOCIAL
-    orContinueWith: 'Or continue with',
-
     // AUTH SCREENS (login / register / recover / verify-code)
     loggingIn: 'Logging in...',
     loginTagline: 'Every sustainable journey begins with a single step',
@@ -538,7 +537,6 @@ export default {
     confirmPasswordPlaceholder: 'Repeat your password',
     passwordMatch: 'Passwords match',
     passwordMinShort: 'Min. 8 characters',
-    orRegisterWith: 'Or sign up with',
     registering: 'Signing up...',
     recoverTitle: 'Recover password',
     recoverSubtitle: 'Enter your email and we will send you a 6-digit verification code to reset your password.',
@@ -574,13 +572,7 @@ export default {
     emailAlreadyRegistered: 'This email is already registered.',
     alreadyRegisteredTitle: 'You are already registered',
     alreadyRegisteredMsg: 'This email already has an account. Do you want to log in or resend the verification code?',
-    alreadyRegisteredOAuthMsg: 'This email already has an EcoRuteando account. Sign in to continue.',
     registerErrorFallback: 'Could not register the user',
-    oauthCancelledTitle: 'Sign in with Google cancelled',
-    oauthCancelledMsg: 'You did not finish signing in with Google.',
-    oauthErrorTitle: 'Could not sign in with Google',
-    oauthNoCode: 'Google did not return the authorization code. Please try again.',
-    oauthNoToken: 'Google did not return a valid access token. Please try again.',
     cancel: 'Cancel',
     errorTitle: 'Error',
 
@@ -754,8 +746,7 @@ export default {
 
     account: {
       title: 'Account settings',
-      subtitle:
-        'Language, theme and data export according to SRS requirements.',
+      subtitle: '',
 
       language: 'Interface language',
       export: 'Export my data',

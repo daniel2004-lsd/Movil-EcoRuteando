@@ -51,8 +51,6 @@ const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> 
 export default function SavedRoutesScreen() {
   const router = useRouter();
   const searchParams = useLocalSearchParams();
-  const { auth } = useAuth();
-  const isGuest = !!auth.guest;
   const { theme } = useThemeMode();
   const { t } = useLanguage();
   const isDark = theme === 'dark';
@@ -173,19 +171,6 @@ export default function SavedRoutesScreen() {
   );
 
   const toggleFavorite = async (route: SavedRoute) => {
-    if (isGuest) {
-      Dialog.alert(
-        t('planRoute.needAccountTitle'),
-        t('planRoute.needAccountMsg').replace('{action}', t('savedRoutes.favoritesTab')),
-        [
-          { text: t('planRoute.notNow'), style: 'cancel' },
-          { text: t('auth.loginButton'), onPress: () => router.push('/(auth)/login') },
-        ],
-        { tone: 'info', icon: 'person-circle' }
-      );
-      return;
-    }
-
     const isFav = favoriteIds.has(route.id);
     setTogglingFavId(route.id);
 
@@ -377,15 +362,28 @@ export default function SavedRoutesScreen() {
           </Text>
 
           <View style={s.statsGrid}>
-            {stats.map((stat, i) => (
-              <View key={i} style={[s.statCard, isDark && s.statCardDark]}>
-                <View style={[s.statIcon, { backgroundColor: stat.color }]}>
-                  <Ionicons name={stat.icon as any} size={20} color={stat.tint} />
+            <View style={s.statsRow}>
+              {stats.slice(0, 2).map((stat, i) => (
+                <View key={i} style={[s.statCard, isDark && s.statCardDark]}>
+                  <View style={[s.statIcon, { backgroundColor: stat.color }]}>
+                    <Ionicons name={stat.icon as any} size={20} color={stat.tint} />
+                  </View>
+                  <Text style={[s.statValue, isDark && { color: '#e2e8f0' }]}>{stat.value}</Text>
+                  <Text style={[s.statLabel, isDark && { color: '#94a3b8' }]}>{stat.label}</Text>
                 </View>
-                <Text style={[s.statValue, isDark && { color: '#e2e8f0' }]}>{stat.value}</Text>
-                <Text style={[s.statLabel, isDark && { color: '#94a3b8' }]}>{stat.label}</Text>
-              </View>
-            ))}
+              ))}
+            </View>
+            <View style={s.statsRow}>
+              {stats.slice(2, 4).map((stat, i) => (
+                <View key={i + 2} style={[s.statCard, isDark && s.statCardDark]}>
+                  <View style={[s.statIcon, { backgroundColor: stat.color }]}>
+                    <Ionicons name={stat.icon as any} size={20} color={stat.tint} />
+                  </View>
+                  <Text style={[s.statValue, isDark && { color: '#e2e8f0' }]}>{stat.value}</Text>
+                  <Text style={[s.statLabel, isDark && { color: '#94a3b8' }]}>{stat.label}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         </View>
 
@@ -683,51 +681,55 @@ export default function SavedRoutesScreen() {
 
                     {/* Grilla de Métricas Enriquecidas 2x2 */}
                     <View style={s.metricsGrid}>
-                      <View style={[s.metricBox, isDark && s.metricBoxDark]}>
-                        <Text style={s.metricIcon}>📏</Text>
-                        <View style={s.metricContent}>
-                          <Text style={[s.metricLabel, isDark && { color: '#94a3b8' }]}>
-                            {t('savedRoutes.distanceLabel')}
-                          </Text>
-                          <Text style={[s.metricVal, isDark && { color: '#e2e8f0' }]}>
-                            {route.distanceKm != null ? `${Number(route.distanceKm).toFixed(1)} km` : '--'}
-                          </Text>
+                      <View style={s.metricsRow}>
+                        <View style={[s.metricBox, isDark && s.metricBoxDark]}>
+                          <Text style={s.metricIcon}>📏</Text>
+                          <View style={s.metricContent}>
+                            <Text style={[s.metricLabel, isDark && { color: '#94a3b8' }]}>
+                              {t('savedRoutes.distanceLabel')}
+                            </Text>
+                            <Text style={[s.metricVal, isDark && { color: '#e2e8f0' }]}>
+                              {route.distanceKm != null ? `${Number(route.distanceKm).toFixed(1)} km` : '--'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={[s.metricBox, isDark && s.metricBoxDark]}>
+                          <Text style={s.metricIcon}>⏱️</Text>
+                          <View style={s.metricContent}>
+                            <Text style={[s.metricLabel, isDark && { color: '#94a3b8' }]}>
+                              Tiempo
+                            </Text>
+                            <Text style={[s.metricVal, isDark && { color: '#e2e8f0' }]}>
+                              {route.estimatedTimeMin != null ? `${route.estimatedTimeMin} min` : '--'}
+                            </Text>
+                          </View>
                         </View>
                       </View>
 
-                      <View style={[s.metricBox, isDark && s.metricBoxDark]}>
-                        <Text style={s.metricIcon}>⏱️</Text>
-                        <View style={s.metricContent}>
-                          <Text style={[s.metricLabel, isDark && { color: '#94a3b8' }]}>
-                            Tiempo
-                          </Text>
-                          <Text style={[s.metricVal, isDark && { color: '#e2e8f0' }]}>
-                            {route.estimatedTimeMin != null ? `${route.estimatedTimeMin} min` : '--'}
-                          </Text>
+                      <View style={s.metricsRow}>
+                        <View style={[s.metricBox, s.metricBoxEco, isDark && s.metricBoxEcoDark]}>
+                          <Text style={s.metricIcon}>🌱</Text>
+                          <View style={s.metricContent}>
+                            <Text style={[s.metricLabel, { color: isDark ? '#34d399' : '#059669' }]}>
+                              CO₂ Ahorrado
+                            </Text>
+                            <Text style={[s.metricVal, { color: isDark ? '#34d399' : '#059669' }]}>
+                              {route.co2SavedKg != null ? `${Number(route.co2SavedKg).toFixed(2)} kg` : '0.00 kg'}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
 
-                      <View style={[s.metricBox, s.metricBoxEco, isDark && s.metricBoxEcoDark]}>
-                        <Text style={s.metricIcon}>🌱</Text>
-                        <View style={s.metricContent}>
-                          <Text style={[s.metricLabel, { color: isDark ? '#34d399' : '#059669' }]}>
-                            CO₂ Ahorrado
-                          </Text>
-                          <Text style={[s.metricVal, { color: isDark ? '#34d399' : '#059669' }]}>
-                            {route.co2SavedKg != null ? `${Number(route.co2SavedKg).toFixed(2)} kg` : '0.00 kg'}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <View style={[s.metricBox, s.metricBoxCal, isDark && s.metricBoxCalDark]}>
-                        <Text style={s.metricIcon}>🔥</Text>
-                        <View style={s.metricContent}>
-                          <Text style={[s.metricLabel, { color: isDark ? '#fb923c' : '#ea580c' }]}>
-                            Calorías
-                          </Text>
-                          <Text style={[s.metricVal, { color: isDark ? '#fb923c' : '#ea580c' }]}>
-                            {calories != null ? `${calories} kcal` : '--'}
-                          </Text>
+                        <View style={[s.metricBox, s.metricBoxCal, isDark && s.metricBoxCalDark]}>
+                          <Text style={s.metricIcon}>🔥</Text>
+                          <View style={s.metricContent}>
+                            <Text style={[s.metricLabel, { color: isDark ? '#fb923c' : '#ea580c' }]}>
+                              Calorías
+                            </Text>
+                            <Text style={[s.metricVal, { color: isDark ? '#fb923c' : '#ea580c' }]}>
+                              {calories != null ? `${calories} kcal` : '--'}
+                            </Text>
+                          </View>
                         </View>
                       </View>
                     </View>
@@ -841,9 +843,10 @@ const s = StyleSheet.create({
   cardDark: { backgroundColor: '#162329', borderColor: '#26383D' },
   cardTitle: { fontSize: 22, fontWeight: '800', color: '#1f2937' },
   cardSub: { fontSize: 12, color: '#6b7280', marginTop: 4 },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 16 },
+  statsGrid: { gap: 12, marginTop: 16 },
+  statsRow: { flexDirection: 'row', gap: 12 },
   statCard: {
-    width: '48%',
+    flex: 1,
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 12,
@@ -1095,13 +1098,15 @@ const s = StyleSheet.create({
   },
 
   metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 12,
   },
+  metricsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   metricBox: {
-    width: '48.5%',
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
