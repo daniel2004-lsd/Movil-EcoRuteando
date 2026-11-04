@@ -1,6 +1,6 @@
 // app/(auth)/register.tsx — 100% igual a web Register.jsx
 import { Dialog } from '../../src/shared/components/ui/AppDialog';
-import {  View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, TextInput  } from 'react-native';
+import {  View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, TextInput, StatusBar  } from 'react-native';
 import React, { useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -143,7 +143,7 @@ const s = StyleSheet.create({
   bg:{flex:1},
   themeBtn:{position:'absolute',bottom:24,right:24,zIndex:50,width:48,height:48,borderRadius:24,backgroundColor:'#059669',alignItems:'center',justifyContent:'center',elevation:4},
   themeBtnDark:{backgroundColor:'#162329',borderWidth:1,borderColor:'#26383D'},
-  backTop:{position:'absolute',top:24,right:24,zIndex:10,flexDirection:'row',alignItems:'center',gap:4},
+  backTop:{position:'absolute',top:Platform.OS === 'android' ? (StatusBar.currentHeight ? StatusBar.currentHeight + 10 : 38) : 24,right:24,zIndex:10,flexDirection:'row',alignItems:'center',gap:4},
   backTopText:{fontSize:14,color:'#6b7280'},
   scroll:{flexGrow:1,alignItems:'center',paddingVertical:24,paddingHorizontal:16,paddingTop:60},
   logoWrap:{alignItems:'center',marginBottom:24},
