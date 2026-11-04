@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { AppState } from 'react-native';
 import * as SecureStore from '../services/keyStorage';
 import { onSessionExpired } from '../services/authEvents';
 import { requestPushPermissions, getExpoPushToken, registerDeviceOnBackend, isExpoGo } from '../services/pushNotificationService';
@@ -17,6 +18,9 @@ type AuthContextType = {
   auth: AuthState;
   isLoading: boolean;
   isAuthenticated: boolean;
+  connectionStatus?: 'online' | 'offline-degraded' | 'offline-unvalidated';
+  connectionMessage?: string | null;
+  retrySessionValidation: () => Promise<boolean>;
   signIn: (params: {
     accessToken: string;
     refreshToken: string;
@@ -33,6 +37,40 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_STORAGE_KEY = 'ecoruteando_auth';
 
+import axios from 'axios';
+import { API_BASE } from '../services/apiClient';
+import {
+  canAccessProtectedRoutes,
+  classifyRefreshError,
+  decodeJwtPayload,
+  executeSingleFlightRefresh,
+  extractClaimsFromAccessToken,
+  hydrateSessionFromTokens,
+  isTemporaryRefreshError,
+  isTemporaryTwoFactorToken,
+  isTokenExpired,
+  normalizeSessionRole,
+  persistValidatedSessionAtomically,
+  purgeSessionStorage,
+  restoreOrRefreshSessionLifecycle,
+} from '../utils/jwtHydration';
+
+export {
+  canAccessProtectedRoutes,
+  classifyRefreshError,
+  decodeJwtPayload,
+  executeSingleFlightRefresh,
+  extractClaimsFromAccessToken,
+  hydrateSessionFromTokens,
+  isTemporaryRefreshError,
+  isTemporaryTwoFactorToken,
+  isTokenExpired,
+  normalizeSessionRole,
+  persistValidatedSessionAtomically,
+  purgeSessionStorage,
+  restoreOrRefreshSessionLifecycle,
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<AuthState>({
     email: null,
@@ -42,70 +80,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: false,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState<
+    'online' | 'offline-degraded' | 'offline-unvalidated'
+  >('online');
+  const [connectionMessage, setConnectionMessage] = useState<string | null>(null);
+
+  const validateAndRestoreSession = useCallback(async (): Promise<boolean> => {
+    try {
+      const result = await restoreOrRefreshSessionLifecycle({
+        storage: SecureStore,
+        refreshCall: async (refreshToken: string) => {
+          const res = await axios.post(
+            `${API_BASE}/api/auth/refresh`,
+            { refreshToken },
+            { timeout: 10000 }
+          );
+          return {
+            accessToken: res.data?.accessToken,
+            refreshToken: res.data?.refreshToken,
+          };
+        },
+      });
+      setAuth(result.authState);
+      setConnectionStatus(result.connectionStatus);
+      setConnectionMessage(result.connectionMessage);
+      return canAccessProtectedRoutes({
+        authState: result.authState,
+        connectionStatus: result.connectionStatus,
+        isLoading: false,
+      });
+    } catch {
+      setAuth({
+        email: null,
+        role: null,
+        userId: null,
+        firstName: null,
+        isAuthenticated: false,
+      });
+      setConnectionStatus('online');
+      setConnectionMessage(null);
+      return false;
+    }
+  }, []);
 
   useEffect(() => {
     (async () => {
       try {
-        const stored = await SecureStore.getItemAsync(AUTH_STORAGE_KEY);
-        const accessToken = await SecureStore.getItemAsync('accessToken');
-
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          // Si existía un estado previo de invitado, se invalida de inmediato
-          if (parsed?.guest) {
-            await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
-            if (accessToken) {
-              await SecureStore.deleteItemAsync('accessToken');
-              await SecureStore.deleteItemAsync('refreshToken');
-              await SecureStore.deleteItemAsync('userId');
-            }
-            setAuth({
-              email: null,
-              role: null,
-              userId: null,
-              firstName: null,
-              isAuthenticated: false,
-            });
-          } else if (accessToken && parsed?.email) {
-            // Sesión legítima con token existente
-            setAuth({
-              email: parsed.email,
-              role: parsed.role || 'user',
-              userId: parsed.userId || null,
-              firstName: parsed.firstName || null,
-              isAuthenticated: true,
-            });
-          } else {
-            setAuth({
-              email: null,
-              role: null,
-              userId: null,
-              firstName: null,
-              isAuthenticated: false,
-            });
-          }
-        } else {
-          setAuth({
-            email: null,
-            role: null,
-            userId: null,
-            firstName: null,
-            isAuthenticated: false,
-          });
-        }
-      } catch {
-        setAuth({
-          email: null,
-          role: null,
-          userId: null,
-          firstName: null,
-          isAuthenticated: false,
-        });
+        await validateAndRestoreSession();
       } finally {
         setIsLoading(false);
       }
     })();
-  }, []);
+  }, [validateAndRestoreSession]);
+
+  // Recuperación automática cuando la sesión quedó en 'offline-unvalidated' y la app vuelve a primer plano
+  useEffect(() => {
+    if (connectionStatus !== 'offline-unvalidated') {
+      return;
+    }
+    const subscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') {
+        void validateAndRestoreSession();
+      }
+    });
+    return () => subscription.remove();
+  }, [connectionStatus, validateAndRestoreSession]);
+
+  const retrySessionValidation = useCallback(async (): Promise<boolean> => {
+    return validateAndRestoreSession();
+  }, [validateAndRestoreSession]);
 
   // Sincronización inmediata cuando el refresh token falla definitivamente en background
   useEffect(() => {
@@ -118,6 +161,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         firstName: null,
         isAuthenticated: false,
       });
+      setConnectionStatus('online');
+      setConnectionMessage(null);
 
       // 2. Purgar credenciales en almacenamiento seguro de forma asíncrona
       try {
@@ -139,23 +184,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     userId?: string;
     firstName?: string;
   }) => {
-    await SecureStore.setItemAsync('accessToken', params.accessToken);
-    await SecureStore.setItemAsync('refreshToken', params.refreshToken);
+    let authData: AuthState;
+    try {
+      authData = await persistValidatedSessionAtomically(SecureStore, params);
+    } catch (err) {
+      setAuth({
+        email: null,
+        role: null,
+        userId: null,
+        firstName: null,
+        isAuthenticated: false,
+      });
+      throw err;
+    }
 
-    const authData: AuthState = {
-      email: params.email,
-      role: (params.role as Role) || 'user',
-      userId: params.userId || null,
-      firstName: params.firstName || null,
-      isAuthenticated: true,
-    };
-
-    await SecureStore.setItemAsync(AUTH_STORAGE_KEY, JSON.stringify(authData));
     setAuth(authData);
+    setConnectionStatus('online');
+    setConnectionMessage(null);
 
-    if (params.userId) {
+    // El registro de notificaciones push se ejecuta únicamente tras completar y persistir la autenticación válida
+    if (authData.isAuthenticated && authData.userId) {
       try {
-        await SecureStore.setItemAsync('userId', params.userId);
         if (isExpoGo) {
           await registerDeviceOnBackend('android', 'EXPO_GO_TEST_TOKEN');
         } else {
@@ -172,17 +221,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await SecureStore.deleteItemAsync('accessToken');
-    await SecureStore.deleteItemAsync('refreshToken');
-    await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
-    await SecureStore.deleteItemAsync('profileAvatarUri');
+    await purgeSessionStorage(SecureStore, true);
     setAuth({ email: null, role: null, userId: null, firstName: null, isAuthenticated: false });
+    setConnectionStatus('online');
+    setConnectionMessage(null);
   };
 
-  const isAuthenticated = auth.isAuthenticated;
+  // Garantía de cierre seguro: nunca considerar autenticada una sesión sin claims completos
+  // ni cuando connectionStatus es 'offline-unvalidated' (antes de validar la sesión con el backend)
+  const isAuthenticated = canAccessProtectedRoutes({
+    authState: auth,
+    connectionStatus,
+    isLoading: false,
+  });
 
   return (
-    <AuthContext.Provider value={{ auth, isLoading, isAuthenticated, signIn, signOut, setAuth }}>
+    <AuthContext.Provider
+      value={{
+        auth,
+        isLoading,
+        isAuthenticated,
+        connectionStatus,
+        connectionMessage,
+        retrySessionValidation,
+        signIn,
+        signOut,
+        setAuth,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

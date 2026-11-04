@@ -153,6 +153,8 @@ export default {
         routeNotFound: 'Aucun itinéraire trouvé',
         routeCalcError: 'Impossible de calculer l’itinéraire',
         routeFromApp: 'Itinéraire calculé depuis l’application mobile',
+        startTripBtn: 'Démarrer le trajet',
+        mapPoiSelected: 'Point sélectionné sur la carte',
         startTripError: 'Erreur lors du démarrage du trajet',
         missingOriginDest: 'Il manque l’origine ou la destination pour démarrer le trajet',
         tripCompletedTitle: 'Trajet terminé !',

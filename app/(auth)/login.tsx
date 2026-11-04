@@ -36,8 +36,14 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const { data } = await apiClient.post('/api/auth/login', { email: email.trim(), password: password.trim() });
-      if (data.requiresTwoFactor) { router.push('/(auth)/verify-code'); return; }
-      if (data.requiresEmailVerification) { router.push('/(auth)/verify-code'); return; }
+      if (data.requiresTwoFactor) {
+        router.push({ pathname: '/(auth)/verify-code', params: { email: email.trim(), mode: '2fa', tempToken: data.twoFactorToken || data.tempToken || '' } });
+        return;
+      }
+      if (data.requiresEmailVerification) {
+        router.push({ pathname: '/(auth)/verify-code', params: { email: email.trim(), mode: 'email-verification' } });
+        return;
+      }
       await signIn({ accessToken: data.accessToken, refreshToken: data.refreshToken, email: email.trim() });
       router.replace('/(tabs)');
     } catch (err: any) {
@@ -50,11 +56,24 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient colors={isDark ? ['#0B1215','#111C20'] : ['#ecfdf5','#f0fdf4','#ccfbf1']} style={s.bg}>
-      <TouchableOpacity onPress={toggleTheme} style={[s.themeBtn, isDark && s.themeBtnDark]}>
+      <TouchableOpacity
+        onPress={toggleTheme}
+        style={[s.themeBtn, isDark && s.themeBtnDark]}
+        accessibilityRole="button"
+        accessibilityLabel={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+        accessibilityHint="Alterna entre el tema visual claro y oscuro"
+      >
         <Text>{isDark ? '☀️' : '🌙'}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.replace('/')} style={s.backTop}>
+      <TouchableOpacity
+        onPress={() => router.replace('/')}
+        style={s.backTop}
+        accessibilityRole="button"
+        accessibilityLabel={t('auth.back')}
+        accessibilityHint="Regresa a la pantalla de bienvenida"
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
         <Ionicons name="arrow-back" size={14} color={isDark ? '#94a3b8' : '#6b7280'} />
         <Text style={[s.backTopText, isDark && {color:'#94a3b8'}]}>{t('auth.back')}</Text>
       </TouchableOpacity>
@@ -70,28 +89,87 @@ export default function LoginScreen() {
           </View>
 
           <View style={[s.card, isDark && s.cardDark]}>
-            <Text style={[s.cardTitle, isDark && {color:'#e2e8f0'}]}>{t('auth.loginTitle')}</Text>
+            <Text style={[s.cardTitle, isDark && {color:'#e2e8f0'}]} accessibilityRole="header">{t('auth.loginTitle')}</Text>
             <Text style={[s.cardSub, isDark && {color:'#94a3b8'}]}>{t('home.welcome')}</Text>
 
             {error ? (
-              <View style={[s.errorBox, retrySeconds>0 && s.errorBoxWarn]}>
+              <View
+                style={[s.errorBox, retrySeconds>0 && s.errorBoxWarn]}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
                 <Text style={[s.errorText, retrySeconds>0 && {color:'#b45309'}]}>{error}{retrySeconds>0 ? ` (${retrySeconds}s)` : ''}</Text>
               </View>
             ) : null}
 
             <Text style={[s.label, isDark && {color:'#34D399'}]}>{t('auth.emailLabel')}</Text>
-            <TextInput value={email} onChangeText={setEmail} placeholder={t('auth.emailPlaceholder')} placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} keyboardType="email-address" autoCapitalize="none" style={[s.input, isDark && s.inputDark]} />
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder={t('auth.emailPlaceholder')}
+              placeholderTextColor={isDark?'#94a3b8':'#9ca3af'}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={[s.input, isDark && s.inputDark]}
+              accessibilityLabel={t('auth.emailLabel')}
+              accessibilityRole="text"
+            />
 
             <Text style={[s.label, isDark && {color:'#34D399'}, {marginTop:14}]}>{t('auth.passwordLabel')}</Text>
             <View style={[s.inputRow, isDark && s.inputRowDark]}>
-              <TextInput value={password} onChangeText={setPassword} placeholder={t('auth.passwordMin')} placeholderTextColor={isDark?'#94a3b8':'#9ca3af'} secureTextEntry={!showPw} style={[s.inputFlex, isDark && {color:'#e2e8f0'}]} />
-              <TouchableOpacity onPress={()=>setShowPw(!showPw)}><Ionicons name={showPw?'eye-off':'eye'} size={18} color={isDark?'#94a3b8':'#6b7280'} /></TouchableOpacity>
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder={t('auth.passwordMin')}
+                placeholderTextColor={isDark?'#94a3b8':'#9ca3af'}
+                secureTextEntry={!showPw}
+                style={[s.inputFlex, isDark && {color:'#e2e8f0'}]}
+                accessibilityLabel={t('auth.passwordLabel')}
+                accessibilityRole="text"
+              />
+              <TouchableOpacity
+                onPress={()=>setShowPw(!showPw)}
+                accessibilityRole="button"
+                accessibilityLabel={showPw ? 'Ocultar contraseña' : 'Ver contraseña'}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name={showPw?'eye-off':'eye'} size={18} color={isDark?'#94a3b8':'#6b7280'} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={()=>router.push('/(auth)/recover')} style={s.forgot}><Text style={[s.forgotText, isDark && {color:'#34D399'}]}>{t('auth.forgotPassword')}</Text></TouchableOpacity>
+            <TouchableOpacity
+              onPress={()=>router.push('/(auth)/recover')}
+              style={s.forgot}
+              accessibilityRole="button"
+              accessibilityLabel={t('auth.forgotPassword')}
+              accessibilityHint="Abre la pantalla de recuperación de contraseña"
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Text style={[s.forgotText, isDark && {color:'#34D399'}]}>{t('auth.forgotPassword')}</Text>
+            </TouchableOpacity>
 
-            <TouchableOpacity onPress={handleLogin} disabled={loading || retrySeconds>0} style={[s.primaryBtn, (loading||retrySeconds>0) && {opacity:0.5}]}><Text style={s.primaryText}>{loading ? t('auth.loggingIn') : t('auth.loginButton')}</Text></TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleLogin}
+              disabled={loading || retrySeconds>0}
+              style={[s.primaryBtn, (loading||retrySeconds>0) && {opacity:0.5}]}
+              accessibilityRole="button"
+              accessibilityLabel={loading ? t('auth.loggingIn') : t('auth.loginButton')}
+              accessibilityState={{ disabled: loading || retrySeconds > 0, busy: loading }}
+            >
+              <Text style={s.primaryText}>{loading ? t('auth.loggingIn') : t('auth.loginButton')}</Text>
+            </TouchableOpacity>
 
-            <View style={s.registerRow}><Text style={[s.registerText, isDark && {color:'#94a3b8'}]}>{t('auth.noAccount')}</Text><TouchableOpacity onPress={()=>router.push('/(auth)/register')}><Text style={[s.registerLink, isDark && {color:'#34D399'}]}>{' '}{t('auth.registerHere')}</Text></TouchableOpacity></View>
+            <View style={s.registerRow}>
+              <Text style={[s.registerText, isDark && {color:'#94a3b8'}]}>{t('auth.noAccount')}</Text>
+              <TouchableOpacity
+                onPress={()=>router.push('/(auth)/register')}
+                accessibilityRole="button"
+                accessibilityLabel={t('auth.registerHere')}
+                accessibilityHint="Abre el formulario de registro de usuario"
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Text style={[s.registerLink, isDark && {color:'#34D399'}]}>{' '}{t('auth.registerHere')}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <Text style={[s.tagline, isDark && {color:'#94a3b8'}]}>{t('auth.loginTagline')}</Text>

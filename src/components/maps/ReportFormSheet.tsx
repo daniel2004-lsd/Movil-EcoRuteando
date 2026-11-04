@@ -1,12 +1,22 @@
 import { Dialog } from '../../shared/components/ui/AppDialog';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, ToastAndroid, Image,  } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import { File as ExpoFile } from 'expo-file-system';
 import { useLanguage } from '../../shared/store/LanguageContext';
 import apiClient from '../../shared/services/apiClient';
+import {
+  REPORT_PHOTO_COMPRESSION_QUALITY,
+  MAX_REPORT_PHOTO_BYTES,
+  buildPhotoUploadRequestConfig,
+  resolveReportPhotoUploadMeta,
+  validateReportPhotoSize,
+  validateUploadedPhotoResponse,
+  type PhotoUploadMetadata,
+} from '../../shared/utils/reportPhotoValidation';
 
 interface Props {
   onClose: () => void;
@@ -23,7 +33,75 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
   const [location, setLocation] = useState('');
   const [details, setDetails] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoMeta, setPhotoMeta] = useState<PhotoUploadMetadata | null>(null);
   const [sending, setSending] = useState(false);
+  const sendingLockRef = useRef(false);
+  // Caché de URL subida exitosamente para evitar recargar la misma fotografía si falla POST /api/obstacle-reports
+  const uploadedPhotoCacheRef = useRef<{ sourceUri: string; serverUrl: string } | null>(null);
+
+  const inspectLocalFileStats = (
+    uri: string
+  ): { exists: boolean | undefined; size: number | null; mimeType: string | null } => {
+    try {
+      const fileObj = new ExpoFile(uri);
+      const isFileScheme = uri.startsWith('file://');
+      const exists = typeof fileObj.exists === 'boolean' ? fileObj.exists : undefined;
+      if (isFileScheme && exists === false) {
+        return { exists: false, size: 0, mimeType: null };
+      }
+      const size =
+        typeof fileObj.size === 'number' && Number.isFinite(fileObj.size)
+          ? isFileScheme || fileObj.size > 0
+            ? fileObj.size
+            : null
+          : null;
+      const mimeType =
+        typeof fileObj.type === 'string' && fileObj.type.trim() ? fileObj.type.trim() : null;
+      return { exists, size, mimeType };
+    } catch {
+      return { exists: undefined, size: null, mimeType: null };
+    }
+  };
+
+  const applyPickedAsset = (asset: ImagePicker.ImagePickerAsset) => {
+    const fallbackStats = inspectLocalFileStats(asset.uri);
+    const resolvedSize =
+      typeof asset.fileSize === 'number' && Number.isFinite(asset.fileSize)
+        ? asset.fileSize
+        : fallbackStats.size;
+    const resolvedMime = asset.mimeType || fallbackStats.mimeType;
+
+    const sizeValidation = validateReportPhotoSize(resolvedSize, { exists: fallbackStats.exists });
+    if (!sizeValidation.isValid) {
+      Dialog.alert(
+        t('common.errorTitle') || 'Imagen no válida',
+        sizeValidation.error || 'El tamaño de la imagen no puede exceder 5 MB.',
+        { tone: 'warning' }
+      );
+      return;
+    }
+
+    const metaValidation = resolveReportPhotoUploadMeta({
+      uri: asset.uri,
+      fileName: asset.fileName,
+      mimeType: resolvedMime,
+      fileSize: resolvedSize,
+      exists: fallbackStats.exists,
+    });
+
+    if (!metaValidation.isValid || !metaValidation.metadata) {
+      Dialog.alert(
+        t('common.errorTitle') || 'Imagen no válida',
+        metaValidation.error || 'Formato o tamaño de imagen no permitido (máx. 5 MB, JPG/PNG/WEBP).',
+        { tone: 'warning' }
+      );
+      return;
+    }
+
+    uploadedPhotoCacheRef.current = null;
+    setPhotoUri(metaValidation.metadata.uri);
+    setPhotoMeta(metaValidation.metadata);
+  };
 
   const OBSTACLE_TYPES = [
     { key: 'hole', label: t('report.obstacles.hole'), icon: 'alert-circle-outline' },
@@ -66,6 +144,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
   }, []);
 
   const handlePickPhoto = async () => {
+    if (sending || sendingLockRef.current) return;
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
@@ -77,12 +156,12 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
       }
       const res = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
-        quality: 0.4,
+        quality: REPORT_PHOTO_COMPRESSION_QUALITY,
         allowsEditing: true,
         aspect: [4, 3],
       });
       if (!res.canceled && res.assets?.length) {
-        setPhotoUri(res.assets[0].uri);
+        applyPickedAsset(res.assets[0]);
       }
     } catch (e) {
       console.warn('[REPORT] cámara error:', e);
@@ -91,6 +170,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
   };
 
   const handlePickGallery = async () => {
+    if (sending || sendingLockRef.current) return;
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
@@ -102,12 +182,12 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
       }
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        quality: 0.4,
+        quality: REPORT_PHOTO_COMPRESSION_QUALITY,
         allowsEditing: true,
         aspect: [4, 3],
       });
       if (!res.canceled && res.assets?.length) {
-        setPhotoUri(res.assets[0].uri);
+        applyPickedAsset(res.assets[0]);
       }
     } catch (e) {
       console.warn('[REPORT] galería error:', e);
@@ -116,7 +196,8 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
   };
 
   const handleSend = async () => {
-    if (sending) return;
+    // Protección síncrona contra doble pulsación en todo el ciclo (subida de foto + creación de reporte)
+    if (sending || sendingLockRef.current) return;
     if (!selectedType) {
       Dialog.alert(t('report.chooseTypeTitle'), t('report.chooseTypeMsg'), {
       tone: 'warning',
@@ -126,8 +207,15 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
     const typeObj = OBSTACLE_TYPES.find(item => item.key === selectedType);
     if (!typeObj) return;
 
+    sendingLockRef.current = true;
     setSending(true);
-    try {
+
+    const releaseSendingLock = () => {
+      sendingLockRef.current = false;
+      setSending(false);
+    };
+
+    const executeCreateReport = async (photoUrlToSave: string | null) => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Dialog.alert(t('planRoute.permissionDeniedTitle'), t('report.gpsMsg'), { tone: 'warning', icon: 'location' });
@@ -135,13 +223,18 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
       }
       const pos = await Location.getCurrentPositionAsync({});
 
+      const reportTypeKey = typeObj.key === 'hole' ? 'pothole'
+        : typeObj.key === 'blocked' ? 'obstruction'
+        : typeObj.key === 'flood' ? 'sewer'
+        : typeObj.key;
+
       await apiClient.post('/api/obstacle-reports', {
-        reportType: typeObj.label,
+        reportType: reportTypeKey,
         description: details.trim() || typeObj.label,
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
         addressText: (location.trim() || t('planRoute.myLocation')).slice(0, 300),
-        photoUrl: photoUri,
+        photoUrl: photoUrlToSave,
       });
 
       if (Platform.OS === 'android') {
@@ -150,18 +243,158 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
         Dialog.alert(t('report.sentTitle'), t('report.sentMsg'));
       }
       onSubmitted();
+    };
+
+    const submitReport = async (photoUrlToSave: string | null) => {
+      if (!sendingLockRef.current) {
+        sendingLockRef.current = true;
+        setSending(true);
+      }
+      try {
+        await executeCreateReport(photoUrlToSave);
+      } catch (e: any) {
+        Dialog.alert(t('report.sendFailedTitle'), e?.message ?? t('planRoute.unexpectedError'), { tone: 'error' });
+      } finally {
+        releaseSendingLock();
+      }
+    };
+
+    try {
+      if (!photoUri) {
+        await executeCreateReport(null);
+        return;
+      }
+
+      if (photoUri.startsWith('http://') || photoUri.startsWith('https://')) {
+        const remoteValidation = validateUploadedPhotoResponse({ status: 201, data: { url: photoUri } });
+        if (!remoteValidation.isValid || !remoteValidation.url) {
+          Dialog.alert(
+            t('common.errorTitle') || 'URL de imagen inválida',
+            remoteValidation.error || 'La URL de la fotografía no es válida.',
+            { tone: 'warning' }
+          );
+          return;
+        }
+        await executeCreateReport(remoteValidation.url);
+        return;
+      }
+
+      // Si la fotografía actual ya fue cargada con éxito en un intento previo (ej. falló solo la creación del reporte),
+      // reutilizar la URL validada sin volver a subir el archivo.
+      if (
+        uploadedPhotoCacheRef.current &&
+        uploadedPhotoCacheRef.current.sourceUri === photoUri &&
+        uploadedPhotoCacheRef.current.serverUrl
+      ) {
+        await executeCreateReport(uploadedPhotoCacheRef.current.serverUrl);
+        return;
+      }
+
+      // Validación preventiva de existencia, tamaño (<= 5 MB y > 0 bytes) y resolución de extensión/MIME
+      const localStats = inspectLocalFileStats(photoUri);
+      const effectiveSize =
+        localStats.size !== null
+          ? localStats.size
+          : typeof photoMeta?.sizeBytes === 'number'
+            ? photoMeta.sizeBytes
+            : null;
+
+      if (
+        localStats.exists === false ||
+        (effectiveSize !== null && (effectiveSize <= 0 || effectiveSize > MAX_REPORT_PHOTO_BYTES))
+      ) {
+        const sizeCheck = validateReportPhotoSize(effectiveSize, { exists: localStats.exists });
+        Dialog.alert(
+          t('common.errorTitle') || 'Imagen no válida',
+          sizeCheck.error || 'El tamaño de la imagen no puede exceder 5 MB.',
+          { tone: 'warning' }
+        );
+        return;
+      }
+
+      const uploadValidation = resolveReportPhotoUploadMeta({
+        uri: photoUri,
+        fileName: photoMeta?.name,
+        mimeType: photoMeta?.type || localStats.mimeType,
+        fileSize: effectiveSize,
+        exists: localStats.exists,
+      });
+
+      if (!uploadValidation.isValid || !uploadValidation.metadata) {
+        Dialog.alert(
+          t('common.errorTitle') || 'Imagen no válida',
+          uploadValidation.error || 'Formato o tamaño de imagen no permitido (máx. 5 MB, JPG/PNG/WEBP).',
+          { tone: 'warning' }
+        );
+        return;
+      }
+
+      // Subida multipart/form-data de fotografía local delegando el boundary al cliente HTTP
+      let validatedServerUrl: string | null = null;
+      try {
+        const formData = new FormData();
+        const { uri, name, type } = uploadValidation.metadata;
+
+        formData.append('file', {
+          uri,
+          name,
+          type,
+        } as any);
+
+        const uploadRes = await apiClient.post(
+          '/api/obstacle-reports/photo',
+          formData,
+          buildPhotoUploadRequestConfig()
+        );
+
+        const responseValidation = validateUploadedPhotoResponse(uploadRes);
+        if (!responseValidation.isValid || !responseValidation.url) {
+          throw new Error(responseValidation.error || 'Servidor no retornó una URL HTTP/HTTPS válida de imagen');
+        }
+        validatedServerUrl = responseValidation.url;
+        uploadedPhotoCacheRef.current = {
+          sourceUri: photoUri,
+          serverUrl: validatedServerUrl,
+        };
+      } catch (uploadErr) {
+        console.warn('[ReportFormSheet] Error al subir foto:', uploadErr);
+        Dialog.alert(
+          t('common.errorTitle') || 'Fallo de subida de fotografía',
+          'No fue posible subir la imagen al servidor. ¿Deseas enviar el reporte sin fotografía o cancelar para reintentar?',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Enviar sin foto',
+              onPress: () => {
+                if (sendingLockRef.current) return;
+                void submitReport(null);
+              },
+            },
+          ],
+          { tone: 'warning' }
+        );
+        return;
+      }
+
+      await executeCreateReport(validatedServerUrl);
     } catch (e: any) {
       Dialog.alert(t('report.sendFailedTitle'), e?.message ?? t('planRoute.unexpectedError'), { tone: 'error' });
     } finally {
-      setSending(false);
+      releaseSendingLock();
     }
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>{t('report.formTitle')}</Text>
-        <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Text style={styles.title} accessibilityRole="header">{t('report.formTitle')}</Text>
+        <TouchableOpacity
+          onPress={onClose}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.close') || 'Cerrar'}
+          accessibilityHint="Cierra el formulario de reporte sin guardar"
+        >
           <Ionicons name="close" size={22} color="#5f6368" />
         </TouchableOpacity>
       </View>
@@ -173,7 +406,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
         showsVerticalScrollIndicator={false}
       >
         {/* Tipos de reporte */}
-        <View style={styles.grid}>
+        <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel={t('report.chooseTypeTitle') || 'Tipo de incidente'}>
           {OBSTACLE_TYPES.map(item => {
             const active = selectedType === item.key;
             return (
@@ -182,6 +415,10 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
                 style={[styles.typeCard, active && styles.typeCardActive]}
                 onPress={() => setSelectedType(item.key)}
                 activeOpacity={0.75}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${item.label}${active ? ', seleccionado' : ''}`}
+                accessibilityHint="Selecciona este tipo de obstáculo para el reporte"
               >
                 <Ionicons
                   name={item.icon as any}
@@ -206,17 +443,27 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
             placeholder={t('report.locationTitle')}
             placeholderTextColor="#9aa0a6"
             returnKeyType="done"
+            accessibilityLabel={t('report.locationTitle')}
           />
         </View>
 
         {/* Foto: cámara / galería estilo Google Maps */}
         {photoUri ? (
           <View style={styles.photoRow}>
-            <Image source={{ uri: photoUri }} style={styles.photoThumb} />
+            <Image source={{ uri: photoUri }} style={styles.photoThumb} accessibilityLabel="Vista previa de la foto adjunta" />
             <Text style={[styles.photoText, { flex: 1 }]}>{t('report.photoAttached')}</Text>
             <TouchableOpacity
-              onPress={() => setPhotoUri(null)}
+              onPress={() => {
+                if (sending || sendingLockRef.current) return;
+                uploadedPhotoCacheRef.current = null;
+                setPhotoUri(null);
+                setPhotoMeta(null);
+              }}
+              disabled={sending}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Eliminar fotografía adjunta"
+              accessibilityHint="Quita la foto seleccionada del reporte"
             >
               <Ionicons name="close-circle" size={20} color="#9aa0a6" />
             </TouchableOpacity>
@@ -224,11 +471,25 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
         ) : (
           <View style={styles.photoRow}>
             <Ionicons name="camera-outline" size={18} color="#16a34a" />
-            <TouchableOpacity style={styles.photoBtn} onPress={handlePickPhoto} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.photoBtn}
+              onPress={handlePickPhoto}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={t('report.cameraBtn')}
+              accessibilityHint="Abre la cámara para tomar una foto del obstáculo"
+            >
               <Text style={styles.photoText}>{t('report.cameraBtn')}</Text>
             </TouchableOpacity>
             <View style={styles.photoDivider} />
-            <TouchableOpacity style={styles.photoBtn} onPress={handlePickGallery} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.photoBtn}
+              onPress={handlePickGallery}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={t('report.galleryBtn')}
+              accessibilityHint="Abre la galería para elegir una foto existente"
+            >
               <Text style={styles.photoText}>{t('report.galleryBtn')}</Text>
             </TouchableOpacity>
           </View>
@@ -243,6 +504,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
           placeholderTextColor="#9aa0a6"
           multiline
           maxLength={500}
+          accessibilityLabel={t('report.detailsPlaceholderOpt')}
         />
       </ScrollView>
 
@@ -251,6 +513,10 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
         onPress={handleSend}
         disabled={sending}
         activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={sending ? t('report.sending') : t('report.send')}
+        accessibilityHint="Envía el reporte comunitario con la ubicación y foto seleccionadas"
+        accessibilityState={{ disabled: sending }}
       >
         <Text style={styles.sendBtnText}>{sending ? t('report.sending') : t('report.send')}</Text>
         <Ionicons name="send" size={18} color="#ffffff" />

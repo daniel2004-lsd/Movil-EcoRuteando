@@ -1,0 +1,28 @@
+# Ignorar dependencias y caches
+node_modules
+node_modules/
+node_modules.backup-*
+node_modules.backup-*/
+.expo/
+*.apk
+reports/
+docs/
+
+# Ignorar artefactos de agentes IA y configuraciones locales
+.agents/
+skills-lock.json
+
+# Ignorar claves de firma locales y secretos
+*.keystore
+*.jks
+*.p12
+release-signing.properties
+android/build/
+android/app/build/
+android/.gradle/
+android/.cxx/
+android/app/.cxx/
+.cxx/
+.gradle/
+local.properties
+android/local.properties
