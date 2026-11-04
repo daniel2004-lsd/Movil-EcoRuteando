@@ -9,6 +9,8 @@
     Modal,
     Animated,
     Easing,
+    Platform,
+    StatusBar,
   } from 'react-native';
   import { LinearGradient } from 'expo-linear-gradient';
   import { Ionicons } from '@expo/vector-icons';
@@ -547,12 +549,12 @@ import { ActivityIndicator } from 'react-native';
   const s = StyleSheet.create({
     fixedHeader: {
       position: 'absolute',
-      top: 8,
+      top: Platform.OS === 'android' ? (StatusBar.currentHeight ? StatusBar.currentHeight + 4 : 32) : 8,
       left: 0,
       right: 0,
       height: 72,
       paddingHorizontal: spacing.lg,
-      paddingTop: 12,
+      paddingTop: Platform.OS === 'android' ? 4 : 12,
       paddingBottom: 8,
       flexDirection: 'row',
       justifyContent: 'space-between',
