@@ -1,6 +1,9 @@
 import axios from 'axios';
 import apiClient from '../../shared/services/apiClient';
 import * as SecureStore from '../../shared/services/keyStorage';
+import { translateStepInstruction } from '../../shared/utils/stepTranslator';
+
+export { translateStepInstruction };
 
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '';
 const BASE_URL = 'https://maps.googleapis.com/maps/api';
@@ -297,6 +300,7 @@ async function tryBackendDirections(
         destinationLat: destination.latitude,
         destinationLng: destination.longitude,
         travelMode: mode,
+        language: 'es',
       },
     });
 
@@ -310,7 +314,7 @@ async function tryBackendDirections(
     }
 
     const mapStep = (step: any): DirectionsStep => ({
-      instruction: stripHtml(step.htmlInstructions || step.instruction || ''),
+      instruction: translateStepInstruction(stripHtml(step.htmlInstructions || step.instruction || '')),
       distance: {
         text: step.distance?.text || '',
         value: step.distance?.valueMeters ?? step.distance?.value ?? 0,
@@ -539,7 +543,7 @@ export async function getDirections(
             distance: leg.distance,
             duration: leg.duration,
             steps: leg.steps.map((step: any) => ({
-              instruction: step.html_instructions.replace(/<[^>]*>/g, ''),
+              instruction: translateStepInstruction(stripHtml(step.html_instructions || '')),
               distance: step.distance,
               duration: step.duration,
               startLocation: step.start_location,
