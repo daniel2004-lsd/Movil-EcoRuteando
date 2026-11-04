@@ -20,7 +20,7 @@ import { LogoCircle } from '../../src/shared/components/landing/LogoCircle';
 import { GradientButton } from '../../src/shared/components/ui/GradientButton';
 import { useThemeMode } from '../../src/shared/store/ThemeContext';
 import { useLanguage } from '../../src/shared/store/LanguageContext';
-import { useAuth } from '../../src/shared/store/AuthContext';
+import { useAuth, decodeJwtPayload, isTokenExpired } from '../../src/shared/store/AuthContext';
 import apiClient from '../../src/shared/services/apiClient';
 
 export default function VerifyCodeScreen() {
@@ -30,8 +30,16 @@ export default function VerifyCodeScreen() {
   const { signIn } = useAuth();
   const isDark = theme === 'dark';
 
-  // email que viene desde el registro: /verify-code?email=algo@mail.com
-  const { email } = useLocalSearchParams<{ email?: string }>();
+  // Parámetros recibidos desde el flujo de login o registro:
+  // email: correo del usuario
+  // mode: '2fa' | 'email-verification'
+  // tempToken: token JWT temporal emitido por el backend durante login con 2FA
+  const { email, mode, tempToken } = useLocalSearchParams<{
+    email?: string;
+    mode?: '2fa' | 'email-verification';
+    tempToken?: string;
+  }>();
+  const is2Fa = mode === '2fa';
 
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
@@ -74,6 +82,7 @@ export default function VerifyCodeScreen() {
   };
 
   const handleVerify = async () => {
+    if (loading) return;
     const joined = code.join('');
     if (joined.length < 6) {
       setError(t('auth.codeIncomplete'));
@@ -82,32 +91,87 @@ export default function VerifyCodeScreen() {
     setError(null);
     setLoading(true);
     try {
-      const res = await apiClient.post('/api/auth/verify-email', { code: joined });
-      const data = res?.data;
-      const accessToken = data?.token || data?.accessToken;
-      const refreshToken = data?.refreshToken;
+      if (is2Fa) {
+        const cleanTempToken = typeof tempToken === 'string' ? tempToken.trim() : '';
+        if (!cleanTempToken) {
+          setError('El token temporal de 2FA ha expirado o no es válido. Por favor inicia sesión nuevamente.');
+          return;
+        }
 
-      if (accessToken && refreshToken && email) {
-        await signIn({
-          accessToken,
-          refreshToken,
-          email: String(email),
-          role: data?.role || 'user',
-          userId: data?.userId,
-          firstName: data?.firstName,
-        });
-        router.replace('/(tabs)');
+        // Si el tempToken es un JWT con exp vencido en cliente, rechazar preventivamente sin autenticar
+        const decodedTemp = decodeJwtPayload(cleanTempToken);
+        if (decodedTemp && typeof decodedTemp.exp === 'number' && isTokenExpired(cleanTempToken, 0)) {
+          setError('El token temporal de 2FA ha expirado o no es válido. Por favor inicia sesión nuevamente.');
+          return;
+        }
+
+        const res = await apiClient.post(
+          '/api/auth/2fa/verify',
+          { code: joined, rememberDevice: false },
+          {
+            headers: {
+              Authorization: `Bearer ${cleanTempToken}`,
+            },
+          }
+        );
+
+        const data = res?.data;
+        const accessToken = data?.accessToken || data?.token;
+        const refreshToken = data?.refreshToken;
+
+        if (accessToken && refreshToken) {
+          if (accessToken === cleanTempToken) {
+            throw new Error('El token temporal de 2FA no puede guardarse como token de acceso.');
+          }
+          await signIn({
+            accessToken,
+            refreshToken,
+            email: String(email || ''),
+            role: data?.role,
+            userId: data?.userId,
+            firstName: data?.firstName,
+          });
+          router.replace('/(tabs)');
+        } else {
+          router.replace('/(auth)/login');
+        }
       } else {
-        router.replace('/(auth)/login');
+        const res = await apiClient.post('/api/auth/verify-email', { code: joined });
+        const data = res?.data;
+        const accessToken = data?.accessToken || data?.token;
+        const refreshToken = data?.refreshToken;
+
+        if (accessToken && refreshToken && email) {
+          await signIn({
+            accessToken,
+            refreshToken,
+            email: String(email),
+            role: data?.role,
+            userId: data?.userId,
+            firstName: data?.firstName,
+          });
+          router.replace('/(tabs)');
+        } else {
+          router.replace('/(auth)/login');
+        }
       }
     } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.response?.data?.message || err?.message || t('auth.codeInvalid'));
+      const msg = err?.response?.data?.detail || err?.response?.data?.message;
+      if (err?.response?.status === 401 && is2Fa) {
+        setError(msg || 'El código o el token temporal de 2FA ha expirado. Por favor inicia sesión nuevamente.');
+      } else {
+        setError(msg || err?.message || t('auth.codeInvalid'));
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleResend = async () => {
+    if (is2Fa) {
+      setError('Los códigos 2FA se generan automáticamente en tu aplicación autenticadora cada 30 segundos.');
+      return;
+    }
     if (!email) {
       setError('No se identificó el correo electrónico. Puedes volver al registro o iniciar sesión.');
       return;
@@ -164,8 +228,9 @@ export default function VerifyCodeScreen() {
                 s.title,
                 isDark && { color: '#e5f9f0' },
               ]}
+              accessibilityRole="header"
             >
-              {t('auth.verifyCodeTitle')}
+              {is2Fa ? 'Verificación de dos pasos' : t('auth.verifyCodeTitle')}
             </Text>
             <Text
               style={[
@@ -173,10 +238,16 @@ export default function VerifyCodeScreen() {
                 isDark && { color: '#9ca3af' },
               ]}
             >
-              {t('auth.verifyCodeSubtitle')}
+              {is2Fa
+                ? 'Ingresa el código de 6 dígitos generado por tu aplicación autenticadora.'
+                : t('auth.verifyCodeSubtitle')}
             </Text>
 
-            <View style={s.codeRow}>
+            <View
+              style={s.codeRow}
+              accessible={true}
+              accessibilityLabel={`Código de 6 dígitos${is2Fa ? ' de autenticación en dos pasos' : ''}`}
+            >
               {code.map((v, i) => (
                 <TextInput
                   key={i}
@@ -197,34 +268,61 @@ export default function VerifyCodeScreen() {
                   onChangeText={value => handleChange(value, i)}
                   onKeyPress={e => handleKeyPress(e, i)}
                   textAlign="center"
+                  accessibilityLabel={`Dígito ${i + 1} de 6`}
+                  accessibilityRole="text"
                 />
               ))}
             </View>
 
-            {error && <Text style={s.error}>{error}</Text>}
+            {error && (
+              <Text
+                style={s.error}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
+                {error}
+              </Text>
+            )}
 
-            <GradientButton
-              title={t('auth.confirmCodeButton')}
-              onPress={handleVerify}
-              loading={loading}
-              style={{ marginTop: spacing.md }}
-            />
-
-            <TouchableOpacity
-              style={s.resendRow}
-              onPress={handleResend}
+            <View
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel={is2Fa ? 'Verificar código 2FA y continuar' : t('auth.confirmCodeButton')}
+              accessibilityState={{ busy: loading }}
             >
-              <Ionicons
-                name="refresh"
-                size={16}
-                color={colors.ecoMain}
+              <GradientButton
+                title={is2Fa ? 'Verificar y continuar' : t('auth.confirmCodeButton')}
+                onPress={handleVerify}
+                loading={loading}
+                style={{ marginTop: spacing.md }}
               />
-              <Text style={s.resendText}>{t('auth.resendCode')}</Text>
-            </TouchableOpacity>
+            </View>
+
+            {!is2Fa && (
+              <TouchableOpacity
+                style={s.resendRow}
+                onPress={handleResend}
+                accessibilityRole="button"
+                accessibilityLabel={t('auth.resendCode')}
+                accessibilityHint="Envía un nuevo código de verificación a tu correo"
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons
+                  name="refresh"
+                  size={16}
+                  color={colors.ecoMain}
+                />
+                <Text style={s.resendText}>{t('auth.resendCode')}</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={s.backRow}
               onPress={() => router.replace('/(auth)/login')}
+              accessibilityRole="button"
+              accessibilityLabel={t('auth.loginButton')}
+              accessibilityHint="Regresar a la pantalla de inicio de sesión"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Ionicons
                 name="log-in-outline"
@@ -234,17 +332,23 @@ export default function VerifyCodeScreen() {
               <Text style={[s.backText, { color: colors.ecoMain, fontWeight: '600' }]}>{t('auth.loginButton')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={s.backRow}
-              onPress={() => router.replace('/(auth)/register')}
-            >
-              <Ionicons
-                name="arrow-back"
-                size={18}
-                color={colors.textMuted}
-              />
-              <Text style={s.backText}>{t('auth.backToRegister')}</Text>
-            </TouchableOpacity>
+            {!is2Fa && (
+              <TouchableOpacity
+                style={s.backRow}
+                onPress={() => router.replace('/(auth)/register')}
+                accessibilityRole="button"
+                accessibilityLabel={t('auth.backToRegister')}
+                accessibilityHint="Regresar a la pantalla de registro de cuenta"
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons
+                  name="arrow-back"
+                  size={18}
+                  color={colors.textMuted}
+                />
+                <Text style={s.backText}>{t('auth.backToRegister')}</Text>
+              </TouchableOpacity>
+            )}
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -65,6 +65,22 @@ export default function HomeScreen() {
     let active = true;
     (async () => {
       try {
+        // Intentar primero el endpoint unificado de estadísticas (CU08/Dashboard)
+        try {
+          const statsRes = await apiClient.get('/api/users/me/dashboard-stats');
+          const d = statsRes.data;
+          if (active && d && (d.trips || d.routes)) {
+            setHomeStats({
+              co2Kg: Number(d.totalCo2Kg) || 0,
+              trips: Number(d.trips?.registered) || 0,
+              minutes: Number(d.totalDurationMin) || 0,
+              favs: Number(d.favoritesCount) || 0,
+            });
+            return;
+          }
+        } catch {}
+
+        // Fallback compatible con versiones anteriores del backend
         const [tripsRes, favsRes] = await Promise.all([
           apiClient.get('/api/trips'),
           apiClient.get('/api/favorites'),
@@ -118,7 +134,15 @@ export default function HomeScreen() {
         </View>
 
         <View style={s.headerRight}>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={s.avatarHeaderBtn} activeOpacity={0.8}>
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)/profile')}
+            style={s.avatarHeaderBtn}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Mi perfil de usuario"
+            accessibilityHint="Abre la pantalla de perfil y configuración de cuenta"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             {avatarUri ? (
               <Image source={{ uri: avatarUri }} style={s.headerAvatar} />
             ) : (
@@ -128,7 +152,14 @@ export default function HomeScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={async()=>{await signOut(); router.replace('/(auth)/login');}} style={[s.logoutBtn, isDark&&{backgroundColor:'#162329',borderColor:'#26383D'}]}>
+          <TouchableOpacity
+            onPress={async()=>{await signOut(); router.replace('/(auth)/login');}}
+            style={[s.logoutBtn, isDark&&{backgroundColor:'#162329',borderColor:'#26383D'}]}
+            accessibilityRole="button"
+            accessibilityLabel={t('home.logoutShort')}
+            accessibilityHint="Cierra tu sesión y regresa a la pantalla de ingreso"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Ionicons name="log-out-outline" size={16} color={isDark?'#e2e8f0':'#4b5563'} />
             <Text style={[s.logoutText, isDark&&{color:'#e2e8f0'}]}>{t('home.logoutShort')}</Text>
           </TouchableOpacity>
@@ -139,10 +170,17 @@ export default function HomeScreen() {
         <View style={[s.greetingCard, isDark&&s.greetingCardDark]}>
           <View style={s.greetingRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[s.greetingTitle, isDark&&{color:'#e2e8f0'}]}>{t('home.hello')}, {userName} 👋</Text>
+              <Text style={[s.greetingTitle, isDark&&{color:'#e2e8f0'}]} accessibilityRole="header">{t('home.hello')}, {userName} 👋</Text>
               <Text style={[s.greetingSub, isDark&&{color:'#94a3b8'}]}>{t('home.greetingSub')}</Text>
             </View>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} activeOpacity={0.85} style={s.greetingAvatarWrap}>
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/profile')}
+              activeOpacity={0.85}
+              style={s.greetingAvatarWrap}
+              accessibilityRole="button"
+              accessibilityLabel={`Perfil de ${userName}`}
+              accessibilityHint="Abre la pantalla de perfil"
+            >
               {avatarUri ? (
                 <Image source={{ uri: avatarUri }} style={s.greetingAvatar} />
               ) : (
@@ -154,15 +192,23 @@ export default function HomeScreen() {
           </View>
           <View style={s.statsGrid}>
             <View style={s.statsRow}>
-              <View style={[s.statCard, isDark && s.statCardDark]}>
-                <View style={[s.statIcon, { backgroundColor: isDark ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.12)' }]}>
+              <View
+                style={[s.statCard, isDark && s.statCardDark]}
+                accessible={true}
+                accessibilityLabel={`${t('home.statCo2')}: ${co2Shown}`}
+              >
+                <View style={[s.statIcon, { backgroundColor: isDark ? 'rgba(160,185,129,0.2)' : 'rgba(16,185,129,0.12)' }]}>
                   <Ionicons name="leaf" size={22} color={isDark ? '#34D399' : '#059669'} />
                 </View>
                 <Text style={[s.statValue, isDark && { color: '#e2e8f0' }]}>{co2Shown}</Text>
                 <Text style={[s.statLabel, isDark && { color: '#94a3b8' }]}>{t('home.statCo2')}</Text>
               </View>
 
-              <View style={[s.statCard, isDark && s.statCardDark]}>
+              <View
+                style={[s.statCard, isDark && s.statCardDark]}
+                accessible={true}
+                accessibilityLabel={`${t('home.statTrips')}: ${tripsShown}`}
+              >
                 <View style={[s.statIcon, { backgroundColor: isDark ? 'rgba(6,182,214,0.2)' : 'rgba(6,182,214,0.12)' }]}>
                   <Ionicons name="navigate" size={22} color={isDark ? '#22d3ee' : '#0284c7'} />
                 </View>
@@ -172,7 +218,11 @@ export default function HomeScreen() {
             </View>
 
             <View style={s.statsRow}>
-              <View style={[s.statCard, isDark && s.statCardDark]}>
+              <View
+                style={[s.statCard, isDark && s.statCardDark]}
+                accessible={true}
+                accessibilityLabel={`${t('home.statTime')}: ${timeShown}`}
+              >
                 <View style={[s.statIcon, { backgroundColor: isDark ? 'rgba(168,85,247,0.2)' : 'rgba(168,85,247,0.12)' }]}>
                   <Ionicons name="time" size={22} color={isDark ? '#c084fc' : '#7c3aed'} />
                 </View>
@@ -186,6 +236,9 @@ export default function HomeScreen() {
                   router.push({ pathname: '/(tabs)/saved-routes', params: { tab: 'favorites' } });
                 }}
                 style={[s.statCard, isDark && s.statCardDark]}
+                accessibilityRole="button"
+                accessibilityLabel={`${t('home.statFavs')}: ${favsShown}`}
+                accessibilityHint="Abre la lista de rutas favoritas guardadas"
               >
                 <View style={[s.statIcon, { backgroundColor: isDark ? 'rgba(244,63,94,0.2)' : 'rgba(244,63,94,0.12)' }]}>
                   <Ionicons name="heart" size={22} color={isDark ? '#fb7185' : '#e11d48'} />
@@ -199,7 +252,7 @@ export default function HomeScreen() {
 
         {/* Sección de Módulos estrictamente en 2 columnas */}
         <View style={s.toolsHeader}>
-          <Text style={[s.toolsTitle, isDark&&{color:'#e2e8f0'}]}>{t('home.tools')}</Text>
+          <Text style={[s.toolsTitle, isDark&&{color:'#e2e8f0'}]} accessibilityRole="header">{t('home.tools')}</Text>
           <Text style={[s.toolsCount, isDark&&{color:'#94a3b8'}]}>{MODULES.length} {t('home.modulesCount')}</Text>
         </View>
 
@@ -213,6 +266,9 @@ export default function HomeScreen() {
                   activeOpacity={0.85}
                   onPress={() => handleModulePress(m1.id)}
                   style={[s.moduleCard, isDark && s.moduleCardDark]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t(m1.titleKey)}: ${t(m1.subKey)}`}
+                  accessibilityHint={`Navegar a la pantalla de ${t(m1.titleKey)}`}
                 >
                   <View style={s.cardTopRow}>
                     <View style={[
@@ -236,6 +292,9 @@ export default function HomeScreen() {
                     activeOpacity={0.85}
                     onPress={() => handleModulePress(m2.id)}
                     style={[s.moduleCard, isDark && s.moduleCardDark]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t(m2.titleKey)}: ${t(m2.subKey)}`}
+                    accessibilityHint={`Navegar a la pantalla de ${t(m2.titleKey)}`}
                   >
                     <View style={s.cardTopRow}>
                       <View style={[
@@ -265,7 +324,15 @@ export default function HomeScreen() {
           <View style={s.impactIcon}><Ionicons name="leaf" size={26} color="#fff" /></View>
           <Text style={s.impactTitle}>{t('home.impactCardTitle')}</Text>
           <Text style={s.impactDesc}>{t('home.impactDescBefore')}<Text style={{fontWeight:'700',color:'#fff'}}>{t('home.impactCo2')}</Text>{t('home.impactDescAfter')}</Text>
-          <TouchableOpacity onPress={()=>router.push('/(tabs)/stats')} style={s.impactBtn}><Text style={s.impactBtnText}>{t('home.seeStats')}</Text></TouchableOpacity>
+          <TouchableOpacity
+            onPress={()=>router.push('/(tabs)/stats')}
+            style={s.impactBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t('home.seeStats')}
+            accessibilityHint="Abre la pantalla de estadísticas detalladas de CO2 y viajes"
+          >
+            <Text style={s.impactBtnText}>{t('home.seeStats')}</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={s.footer}><Ionicons name="leaf" size={14} color="#10b981" /><Text style={[s.footerText, isDark&&{color:'#94a3b8'}]}>{t('home.footerNote')}</Text></View>
