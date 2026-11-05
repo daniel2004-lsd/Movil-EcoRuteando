@@ -12,7 +12,7 @@ import { ClimateWatcher } from '../src/shared/components/ClimateWatcher';
 
 export default function RootLayout() {
   useEffect(() => {
-    setupPushNotifications((notification: any) => {
+    void setupPushNotifications((notification: any) => {
       const data = notification.request.content.data;
       if (data?.actionUrl) {
         // Navegación a la URL de la notificación

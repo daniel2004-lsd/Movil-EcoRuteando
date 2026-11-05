@@ -87,7 +87,7 @@ export default function AlertsScreen() {
       setForecast(res.forecast);
       // Arranca la vigilancia en vivo (notifica al entrar a una zona).
       startClimateAlertWatcher().catch(() => {});
-      ensureNotificationPermission().then(setNotifOk);
+      void ensureNotificationPermission().then(setNotifOk).catch(() => {});
     } catch (e: any) {
       console.warn('[alerts] error:', e?.message, e?.response?.status);
       setLoadError(t('alerts.locationError'));

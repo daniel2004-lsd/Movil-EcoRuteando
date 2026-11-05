@@ -32,12 +32,15 @@ const IGNORED_PATHS = [
 ];
 
 function getFilesToScan() {
+  const execOptions = {
+    cwd: projectRoot,
+    encoding: 'utf8',
+    env: { ...process.env, PATH: '/usr/local/bin:/usr/bin:/bin' },
+  };
+
   if (checkStagedOnly) {
     try {
-      const output = execSync('git diff --cached --name-only --diff-filter=ACMR', {
-        cwd: projectRoot,
-        encoding: 'utf8',
-      });
+      const output = execSync('git diff --cached --name-only --diff-filter=ACMR', execOptions);
       return output.split('\n').filter(Boolean);
     } catch {
       return [];
@@ -45,10 +48,7 @@ function getFilesToScan() {
   }
 
   try {
-    const output = execSync('git ls-files', {
-      cwd: projectRoot,
-      encoding: 'utf8',
-    });
+    const output = execSync('git ls-files', execOptions);
     return output.split('\n').filter(Boolean);
   } catch {
     return [];
