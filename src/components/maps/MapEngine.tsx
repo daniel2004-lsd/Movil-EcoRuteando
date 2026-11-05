@@ -53,11 +53,11 @@ const MapView = forwardRef((props: MapEngineProps, ref: any) => {
       }
     };
 
-    checkPerm();
+    void checkPerm();
 
     const sub = AppState.addEventListener('change', state => {
       if (state === 'active') {
-        checkPerm();
+        void checkPerm();
       }
     });
 

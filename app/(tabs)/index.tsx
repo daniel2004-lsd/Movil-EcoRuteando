@@ -33,7 +33,7 @@ export default function HomeScreen() {
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   useFocusEffect(useCallback(() => {
     let active = true;
-    (async () => {
+    void (async () => {
       try {
         const { data } = await apiClient.get('/api/auth/me');
         const u = data?.user ?? data;
@@ -63,7 +63,7 @@ export default function HomeScreen() {
   } | null>(null);
   useFocusEffect(useCallback(() => {
     let active = true;
-    (async () => {
+    void (async () => {
       try {
         // Intentar primero el endpoint unificado de estadísticas (CU08/Dashboard)
         try {
