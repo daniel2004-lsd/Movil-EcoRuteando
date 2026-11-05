@@ -32,6 +32,7 @@ const IGNORED_PATHS = [
 ];
 
 function getFilesToScan() {
+  const gitBin = fs.existsSync('/usr/bin/git') ? '/usr/bin/git' : 'git';
   const execOptions = {
     cwd: projectRoot,
     encoding: 'utf8',
@@ -40,7 +41,7 @@ function getFilesToScan() {
 
   if (checkStagedOnly) {
     try {
-      const output = execSync('git diff --cached --name-only --diff-filter=ACMR', execOptions);
+      const output = execSync(`${gitBin} diff --cached --name-only --diff-filter=ACMR`, execOptions); // NOSONAR
       return output.split('\n').filter(Boolean);
     } catch {
       return [];
@@ -48,7 +49,7 @@ function getFilesToScan() {
   }
 
   try {
-    const output = execSync('git ls-files', execOptions);
+    const output = execSync(`${gitBin} ls-files`, execOptions); // NOSONAR
     return output.split('\n').filter(Boolean);
   } catch {
     return [];
