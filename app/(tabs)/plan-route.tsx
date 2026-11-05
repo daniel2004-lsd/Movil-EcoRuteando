@@ -470,7 +470,7 @@ export default function PlanRouteScreen() {
 
   useEffect(() => {
     isMountedRef.current = true;
-    getCurrentLocation(true);
+    void getCurrentLocation(true);
     refreshNearbyReports();
 
     return () => {

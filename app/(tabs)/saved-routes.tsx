@@ -172,6 +172,7 @@ export default function SavedRoutesScreen() {
 
   const toggleFavorite = async (route: SavedRoute) => {
     const isFav = favoriteIds.has(route.id);
+    const previousFavoriteIds = new Set(favoriteIds);
     setTogglingFavId(route.id);
 
     // Optimistic update
@@ -194,7 +195,7 @@ export default function SavedRoutesScreen() {
       }
     } catch {
       // Revertir si falla
-      setFavoriteIds(favoriteIds);
+      setFavoriteIds(() => previousFavoriteIds);
       setRoutes(prev =>
         prev.map(r => (r.id === route.id ? { ...r, isFavorite: isFav } : r))
       );

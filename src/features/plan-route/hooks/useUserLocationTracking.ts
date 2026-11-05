@@ -62,7 +62,7 @@ export function useUserLocationTracking({
 
         // Persistir periódicamente cada 5 muestras para resiliencia offline via servicio
         if (gpsBreadcrumbsRef.current.length % 5 === 0) {
-          tripTelemetryService.saveOfflineBreadcrumbs(activeTripId, gpsBreadcrumbsRef.current);
+          void tripTelemetryService.saveOfflineBreadcrumbs(activeTripId, gpsBreadcrumbsRef.current);
         }
       }
 
@@ -129,11 +129,11 @@ export function useUserLocationTracking({
   // Cargar evidencia offline previa si se está reanudando o recuperando un viaje activo
   useEffect(() => {
     if (!activeTripId) return;
-    tripTelemetryService.getOfflineBreadcrumbs(activeTripId).then(crumbs => {
+    void tripTelemetryService.getOfflineBreadcrumbs(activeTripId).then(crumbs => {
       if (crumbs.length > 0 && gpsBreadcrumbsRef.current.length === 0) {
         gpsBreadcrumbsRef.current = crumbs;
       }
-    });
+    }).catch(() => {});
   }, [activeTripId]);
 
   // Suscripción a GPS con Foreground Service persistente mientras el viaje está activo
@@ -148,7 +148,7 @@ export function useUserLocationTracking({
     let fallbackSub: Location.LocationSubscription | null = null;
     let unsubscribeTask: (() => void) | null = null;
 
-    (async () => {
+    void (async () => {
       const perm = await Location.getForegroundPermissionsAsync();
       if (perm.status !== 'granted') {
         const req = await Location.requestForegroundPermissionsAsync();
