@@ -1373,7 +1373,7 @@ export default function ProfileScreen() {
                 style={s.photoModalChangeBtn}
                 onPress={() => {
                   setShowPhotoModal(false);
-                  handlePickAvatar();
+                  void handlePickAvatar();
                 }}
                 accessibilityRole="button"
                 accessibilityLabel={t('profile.changePhoto')}

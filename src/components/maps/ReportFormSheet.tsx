@@ -115,7 +115,7 @@ export function ReportFormSheet({ onClose, onSubmitted }: Props) {
 
   // Prefill de la ubicación con reverse geocoding (como Google Maps).
   useEffect(() => {
-    (async () => {
+    void (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {

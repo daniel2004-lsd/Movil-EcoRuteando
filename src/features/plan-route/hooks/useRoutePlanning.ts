@@ -188,11 +188,11 @@ export function useRoutePlanning({ t, onRouteCalculated, onRouteCleared, fitPadd
 
           onRouteCalculated?.(directions, coords);
 
-          getSustainabilityEstimate(
+          void getSustainabilityEstimate(
             { latitude: o.latitude, longitude: o.longitude },
             { latitude: d.latitude, longitude: d.longitude },
             selectedMode
-          ).then(setEstimate);
+          ).then(setEstimate).catch(() => {});
 
           return directions;
         } else {

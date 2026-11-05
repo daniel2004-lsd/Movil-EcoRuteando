@@ -124,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       try {
         await validateAndRestoreSession();
       } finally {

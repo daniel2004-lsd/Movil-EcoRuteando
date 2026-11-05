@@ -60,7 +60,7 @@ export function useTripLifecycle({
   // Cargar ids de favoritos para identificar si la ruta activa ya es favorita
   useEffect(() => {
     let active = true;
-    (async () => {
+    void (async () => {
       try {
         const { data } = await apiClient.get('/api/favorites');
         const items: any[] = Array.isArray(data) ? data : (data?.items ?? []);

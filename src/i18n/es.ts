@@ -446,7 +446,7 @@ export default {
     // RECOVER CODE
     stepEmail: 'CORREO',
     stepCode: 'CÓDIGO',
-    stepPassword: 'CONTRASEÑA',
+    stepPassword: 'CONTRASEÑA', // NOSONAR
     recoverCodeTitle: 'Verificar código',
     recoverCodeSubtitle:
       'Hemos enviado un código de 6 dígitos a tu correo registrado',
@@ -467,7 +467,7 @@ export default {
     // LABELS
     nameLabel: 'Nombre completo',
     emailLabel: 'Correo electrónico',
-    passwordLabel: 'Contraseña',
+    passwordLabel: 'Contraseña', // NOSONAR
     confirmPasswordLabel: 'Confirmar contraseña',
 
     // PLACEHOLDERS
@@ -552,7 +552,7 @@ export default {
     backToRegister: 'Volver al registro',
     stepEmailLabel: 'CORREO',
     stepCodeLabel: 'CÓDIGO',
-    stepPasswordLabel: 'CONTRASEÑA',
+    stepPasswordLabel: 'CONTRASEÑA', // NOSONAR
     newPasswordTitle: 'Nueva contraseña',
     newPasswordSubtitle: 'Elige una contraseña segura para proteger tu cuenta',
     confirmNewPasswordLabel: 'Confirmar nueva contraseña',
